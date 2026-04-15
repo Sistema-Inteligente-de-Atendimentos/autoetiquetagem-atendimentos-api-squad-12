@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from app.services.llm_service import classify_text
 
 router = APIRouter()
 
@@ -13,4 +14,4 @@ def home():
 
 @router.post("/classify")
 def classify(req: Request):
-    return {"message":f"Recebido {req.text}"}
+    return classify_text(req.text)
