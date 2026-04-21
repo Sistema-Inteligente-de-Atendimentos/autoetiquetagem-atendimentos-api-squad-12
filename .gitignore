@@ -1,10 +1,3 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-
-# Virtual env
-venv/
-
-# Env variables (VERY IMPORTANT)
 .env
+venv/
+__pycache__/
