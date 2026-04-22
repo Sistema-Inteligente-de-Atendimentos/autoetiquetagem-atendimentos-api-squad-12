@@ -78,7 +78,7 @@ source venv/bin/activate
 
 ### 4. Instalar dependências
 ```bash
-pip install fastapi uvicorn python-dotenv openai
+pip install -r requirements.txt
 ```
 ### 5. Rodar a aplicação
 ```bash
