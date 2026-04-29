@@ -18,40 +18,29 @@ def classify(req: Request):
     return classify_text(req.text)
 
 @router.post("/classify/batch")
-async def classify_batch(file:UploadFile = File(...)):
-    if file.filename.endswith(".csv"):
-        df = pd.read_csv(file.file)
-    elif file.filename.endswith(".xlsx"):
-        df = pd.read_excel(file.file)
-    else:
-        return {"error":"Formato inválido. Use CSV ou XLSX"}
-    
-    if "texto" not in df.columns and "atendimento" not in df.columns:
-        return {"error": "Arquivo precisa ter coluna 'texto' ou 'atendimento' "}
-    
-    column = "texto" if "texto" in df.columns else "atendimento"
+async def classify_batch(file: UploadFile = File(...)):
 
-    results = []
+    content = await file.read()
+    text_data = content.decode("utf-8")
 
-    for index, row in df.iterrows():
-        text =str(row[column])
+    lines = [line.strip() for line in text_data.splitlines() if line.strip()]
 
-        try:
-            response = classify_text(text)
-            results.append({
-                 "index": index,
-                "input": text,
-                "data": response.get("data"),
-                "usage": response.get("usage")
-            })
+    if lines and lines[0].lower() in ["texto", "atendimento"]:
+        lines = lines[1:]
 
-        except Exception as e:
-            results.append({
-                "index": index,
-                "error": str(e)
-            })
+    full_conversation = "\n".join(lines)
+
+    try:
+        response = classify_text(full_conversation)
 
         return {
-            "total": len(results),
-            "results": results
+            "total_messages": len(lines),
+            "conversation": full_conversation,
+            "data": response.get("data"),
+            "usage": response.get("usage")
         }
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        } 
