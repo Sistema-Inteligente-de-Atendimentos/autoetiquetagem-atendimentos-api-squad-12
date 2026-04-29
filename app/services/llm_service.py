@@ -51,9 +51,15 @@ def classify_text(text:str):
     clean_content = re.sub(r"```json|```", "", content).strip()
 
     try:
-        return json.loads(clean_content)
+        parsed = json.loads(clean_content)
+
+        return {
+            "data": parsed,
+            "usage": response.usage
+        }
     except Exception as e:
         return {
             "error": "Invalid JSON",
-            "raw_response": content
+            "raw_response": content,
+            "usage": response.usage
         }
