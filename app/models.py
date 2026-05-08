@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Text, ForeignKey, Float, DateTim
 from sqlalchemy.dialects.postgresql import JSONB  
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from config import Base 
+from app.config import Base
 
 class Atendimento(Base):
     __tablename__ = 'atendimentos' 
