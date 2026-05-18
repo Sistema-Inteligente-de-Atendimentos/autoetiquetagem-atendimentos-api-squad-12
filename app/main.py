@@ -1,18 +1,28 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
-from app.routes.classify import router as classify_router
-from app.config import SessionLocal
-from app.models import Atendimento, AnaliseIA # Importe seus modelos
 
-app = FastAPI()
+from app.config import Base, SessionLocal, engine
+
+
+from app.models import (
+    ChannelChat,
+    ChannelChatProtocol,
+    ChannelChatMessage,
+    Avaliacao,
+)
+from app.routes.classify import router as classify_router
+from app.routes.dashboard import router as dashboard_router
+
+
+app = FastAPI(title="Auto-Etiquetagem de Atendimentos - Squad 12")
 
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://autoetiquetagem-atendimentos-web-squad-12-7qna8pypr.vercel.app"
+        "https://autoetiquetagem-atendimentos-web-squad-12-7qna8pypr.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -28,12 +38,29 @@ def get_db():
         db.close()
 
 
-@app.get("/atendimentos")
-def get_atendimentos(db: Session = Depends(get_db)):
+@app.on_event("startup")
+def on_startup() -> None:
 
-    return db.query(Atendimento).options(
-        joinedload(Atendimento.analises).joinedload(AnaliseIA.score_qualidade)
-    ).all()
+    Base.metadata.create_all(bind=engine)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/chats")
+def list_chats(db: Session = Depends(get_db)):
+
+    return (
+        db.query(ChannelChat)
+        .options(
+            joinedload(ChannelChat.protocolos).joinedload(ChannelChatProtocol.mensagens),
+            joinedload(ChannelChat.protocolos).joinedload(ChannelChatProtocol.avaliacoes),
+        )
+        .all()
+    )
 
 
 app.include_router(classify_router)
+app.include_router(dashboard_router)

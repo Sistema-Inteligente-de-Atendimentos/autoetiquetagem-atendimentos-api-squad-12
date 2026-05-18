@@ -1,69 +1,114 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from sqlalchemy.orm import Session
-import pandas as pd
+import uuid
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_db
-from app.models import Atendimento, AnaliseIA, ScoreQualidade
+from app.models import (
+    Avaliacao,
+    ChannelChat,
+    ChannelChatMessage,
+    ChannelChatProtocol,
+)
+from app.schemas import (
+    AvaliacaoOut,
+    ChatOut,
+    ClassifyResponse,
+    MensagemOut,
+    ProtocoloDetalheOut,
+)
 from app.services.llm_service import classify_text
 
-router = APIRouter()
+
+router = APIRouter(tags=["Atendimentos"])
 
 
-class Request(BaseModel):
+class ClassifyRequest(BaseModel):
     text: str
-    origem: str = "Web"
+    canal: str = "Web"
+    cliente_nome: str | None = None
+    atendente_nome: str | None = None
+    remetente: str = "cliente"
 
 
-@router.post("/classify")
-def classify(req: Request, db: Session = Depends(get_db)):
+def _to_text(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return " | ".join(
+            item if isinstance(item, str) else str(item) for item in value
+        )
+    if isinstance(value, dict):
+        return str(value)
+    return str(value)
+
+
+def _to_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+@router.post("/classify", response_model=ClassifyResponse)
+def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
     response = classify_text(req.text)
 
     if "error" in response:
         raise HTTPException(status_code=500, detail=response["error"])
 
-    data = response.get("data", {})
+    data = response.get("data", {}) or {}
+    qualidade = data.get("qualidade") or {}
 
     try:
-        novo_atendimento = Atendimento(
-            texto_bruto=req.text,
-            origem=req.origem
+        novo_chat = ChannelChat(
+            cliente_nome=req.cliente_nome,
+            atendente_nome=req.atendente_nome,
+            canal=req.canal,
         )
-        db.add(novo_atendimento)
+        db.add(novo_chat)
         db.flush()
 
-        nova_analise = AnaliseIA(
-            atendimento_id=novo_atendimento.id,
-            categoria=data.get("categoria"),
-            intencao=data.get("intencao"),
-            sentimento=data.get("sentimento"),
-            criticidade=data.get("criticidade"),
-            resumo=data.get("resumo"),
-            topicos=data.get("topicos"),
-            json_raw=str(response)
+        novo_protocolo = ChannelChatProtocol(
+            channel_chat_id=novo_chat.id,
+            numero=str(uuid.uuid4()),
         )
-        db.add(nova_analise)
+        db.add(novo_protocolo)
         db.flush()
 
-        scores_data = data.get("qualidade") or {}
-
-        novo_score = ScoreQualidade(
-            analise_id=nova_analise.id,
-            empatia=scores_data.get("empatia", 0),
-            clareza=scores_data.get("clareza", 0),
-            objetividade=scores_data.get("objetividade", 0),
-            resolutividade=scores_data.get("resolutividade", 0),
-            score_final=scores_data.get("score_final", 0)
+        nova_mensagem = ChannelChatMessage(
+            channel_chat_id=novo_chat.id,
+            protocolo_id=novo_protocolo.id,
+            remetente=req.remetente,
+            conteudo=req.text,
         )
-        db.add(novo_score)
+        db.add(nova_mensagem)
+        db.flush()
+
+        comentario = _to_text(data.get("resumo"))
+        nota = _to_int(qualidade.get("score_final", qualidade.get("nota", 0)))
+
+        nova_avaliacao = Avaliacao(
+            protocolo_id=novo_protocolo.id,
+            nota=nota,
+            comentario=comentario,
+        )
+        db.add(nova_avaliacao)
+        db.flush()
 
         db.commit()
 
-        return {
-            "status": "sucesso",
-            "atendimento_id": novo_atendimento.id,
-            "data": data
-        }
+        return ClassifyResponse(
+            status="sucesso",
+            chat_id=novo_chat.id,
+            protocolo_id=novo_protocolo.id,
+            protocolo_numero=novo_protocolo.numero,
+            mensagem_id=nova_mensagem.id,
+            avaliacao_id=nova_avaliacao.id,
+            data=data,
+        )
 
     except Exception as e:
         db.rollback()
@@ -72,13 +117,66 @@ def classify(req: Request, db: Session = Depends(get_db)):
 
 @router.get("/atendimentos")
 def list_atendimentos(db: Session = Depends(get_db)):
-    atendimentos = db.query(Atendimento).all()
-    return atendimentos
+    protocolos = (
+        db.query(ChannelChatProtocol)
+        .options(
+            joinedload(ChannelChatProtocol.chat),
+            joinedload(ChannelChatProtocol.avaliacoes),
+        )
+        .order_by(ChannelChatProtocol.aberto_em.desc())
+        .all()
+    )
+
+    resultado = []
+    for p in protocolos:
+        avaliacao = p.avaliacoes[0] if p.avaliacoes else None
+        resultado.append(
+            {
+                "protocolo_id": p.id,
+                "numero": p.numero,
+                "cliente_nome": p.chat.cliente_nome if p.chat else None,
+                "atendente_nome": p.chat.atendente_nome if p.chat else None,
+                "canal": p.chat.canal if p.chat else None,
+                "aberto_em": p.aberto_em,
+                "fechado_em": p.fechado_em,
+                "nota": avaliacao.nota if avaliacao else None,
+                "comentario": avaliacao.comentario if avaliacao else None,
+            }
+        )
+    return resultado
 
 
-@router.get("/auditoria/{atendimento_id}")
-def get_auditoria(atendimento_id: int, db: Session = Depends(get_db)):
-    atendimento = db.query(Atendimento).filter(Atendimento.id == atendimento_id).first()
-    if not atendimento:
-        raise HTTPException(status_code=404, detail="Atendimento não encontrado")
-    return atendimento
+@router.get("/atendimentos/{protocolo_id}", response_model=ProtocoloDetalheOut)
+def get_atendimento_detalhe(protocolo_id: int, db: Session = Depends(get_db)):
+    protocolo = (
+        db.query(ChannelChatProtocol)
+        .options(
+            joinedload(ChannelChatProtocol.chat),
+            joinedload(ChannelChatProtocol.mensagens),
+            joinedload(ChannelChatProtocol.avaliacoes),
+        )
+        .filter(ChannelChatProtocol.id == protocolo_id)
+        .first()
+    )
+
+    if not protocolo:
+        raise HTTPException(status_code=404, detail="Protocolo não encontrado")
+
+    mensagens_ordenadas = sorted(
+        protocolo.mensagens,
+        key=lambda m: m.enviada_em or m.id,
+    )
+
+    return ProtocoloDetalheOut(
+        id=protocolo.id,
+        numero=protocolo.numero,
+        aberto_em=protocolo.aberto_em,
+        fechado_em=protocolo.fechado_em,
+        chat=ChatOut.model_validate(protocolo.chat),
+        mensagens=[MensagemOut.model_validate(m) for m in mensagens_ordenadas],
+        avaliacao=(
+            AvaliacaoOut.model_validate(protocolo.avaliacoes[0])
+            if protocolo.avaliacoes
+            else None
+        ),
+    )
