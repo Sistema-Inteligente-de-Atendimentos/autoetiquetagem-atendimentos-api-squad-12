@@ -1,59 +1,99 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Float, DateTime, JSON, Index
-from sqlalchemy.dialects.postgresql import JSONB  
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from app.config import Base
 
-class Atendimento(Base):
-    __tablename__ = 'atendimentos' 
+
+class ChannelChat(Base):
+    __tablename__ = "channel_chats"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    texto_bruto = Column(Text, nullable=False)
-    origem = Column(String(50)) 
-    data_criacao = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    cliente_nome = Column("ClienteNome", String(150), nullable=True)
+    atendente_nome = Column("AtendenteNome", String(150), nullable=True)
+    canal = Column("Canal", String(50), nullable=True)
+    iniciado_em = Column("IniciadoEm", DateTime(timezone=True), server_default=func.now())
+    encerrado_em = Column("EncerradoEm", DateTime(timezone=True), nullable=True)
 
-    analises = relationship("AnaliseIA", back_populates="atendimento", cascade="all, delete-orphan")
+    protocolos = relationship(
+        "ChannelChatProtocol",
+        back_populates="chat",
+        cascade="all, delete-orphan",
+    )
+    mensagens = relationship(
+        "ChannelChatMessage",
+        back_populates="chat",
+        cascade="all, delete-orphan",
+    )
 
-class AnaliseIA(Base):
-    __tablename__ = 'analises_ia'
+
+class ChannelChatProtocol(Base):
+    __tablename__ = "channel_chat_protocols"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    atendimento_id = Column(Integer, ForeignKey('atendimentos.id'), nullable=False, index=True)
-    
-    categoria = Column(String(100), index=True)
-    intencao = Column(String(100))
-    sentimento = Column(String(50), index=True)
-    criticidade = Column(String(50), index=True)
-    resumo = Column(Text)
-    topicos = Column(JSONB) 
-    json_raw = Column(Text) 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    channel_chat_id = Column(
+        "ChannelChatId",
+        Integer,
+        ForeignKey("channel_chats.id"),
+        nullable=False,
+        index=True,
+    )
+    numero = Column("Numero", String(100), nullable=False, unique=True, index=True)
+    aberto_em = Column("AbertoEm", DateTime(timezone=True), server_default=func.now())
+    fechado_em = Column("FechadoEm", DateTime(timezone=True), nullable=True)
 
-    atendimento = relationship("Atendimento", back_populates="analises")
-    score_qualidade = relationship("ScoreQualidade", back_populates="analise", uselist=False)
-    validacoes = relationship("ValidacaoHumana", back_populates="analise")
+    chat = relationship("ChannelChat", back_populates="protocolos")
+    mensagens = relationship(
+        "ChannelChatMessage",
+        back_populates="protocolo",
+        cascade="all, delete-orphan",
+    )
+    avaliacoes = relationship(
+        "Avaliacao",
+        back_populates="protocolo",
+        cascade="all, delete-orphan",
+    )
 
-class ScoreQualidade(Base):
-    __tablename__ = 'scores_qualidade'
+
+class ChannelChatMessage(Base):
+    __tablename__ = "channel_chat_messages"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    analise_id = Column(Integer, ForeignKey('analises_ia.id'), nullable=False)
-    
-    empatia = Column(Integer)
-    clareza = Column(Integer)
-    objetividade = Column(Integer)
-    resolutividade = Column(Integer)
-    score_final = Column(Float)
+    channel_chat_id = Column(
+        "ChannelChatId",
+        Integer,
+        ForeignKey("channel_chats.id"),
+        nullable=False,
+        index=True,
+    )
+    protocolo_id = Column(
+        "ProtocoloId",
+        Integer,
+        ForeignKey("channel_chat_protocols.id"),
+        nullable=False,
+        index=True,
+    )
+    remetente = Column("Remetente", String(100), nullable=True)
+    conteudo = Column("Conteudo", Text, nullable=False)
+    enviada_em = Column("EnviadaEm", DateTime(timezone=True), server_default=func.now())
 
-    analise = relationship("AnaliseIA", back_populates="score_qualidade")
+    chat = relationship("ChannelChat", back_populates="mensagens")
+    protocolo = relationship("ChannelChatProtocol", back_populates="mensagens")
 
-class ValidacaoHumana(Base):
-    __tablename__ = 'validacoes_humana'
+
+class Avaliacao(Base):
+    __tablename__ = "avaliacoes"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    analise_id = Column(Integer, ForeignKey('analises_ia.id'), nullable=False)
-    
-    categoria_correta = Column(String)
-    sentimento_correto = Column(String)
-    observacoes = Column(Text)
-    usuario_revisor = Column(String)
-    status = Column(String)
-    data_validacao = Column(DateTime(timezone=True))
+    protocolo_id = Column(
+        "ProtocoloId",
+        Integer,
+        ForeignKey("channel_chat_protocols.id"),
+        nullable=False,
+        index=True,
+    )
+    nota = Column("Nota", Integer, nullable=True)
+    comentario = Column("Comentario", Text, nullable=True)
+    avaliado_em = Column("AvaliadoEm", DateTime(timezone=True), server_default=func.now())
 
-    analise = relationship("AnaliseIA", back_populates="validacoes")
+    protocolo = relationship("ChannelChatProtocol", back_populates="avaliacoes")
