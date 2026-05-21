@@ -84,8 +84,25 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
 
     try:
         if extensao == ".csv":
-            # utf-8-sig remove o BOM automaticamente se existir
-            df = pd.read_csv(io.BytesIO(conteudo), sep=None, engine="python", encoding="utf-8-sig")
+            df = None
+            ultimo_erro = None
+            # Tenta separadores comuns na ordem. utf-8-sig remove BOM se existir.
+            for sep in [",", ";", "\t", "|"]:
+                try:
+                    candidato = pd.read_csv(
+                        io.BytesIO(conteudo),
+                        sep=sep,
+                        engine="python",
+                        encoding="utf-8-sig",
+                    )
+                    if not candidato.empty:
+                        df = candidato
+                        break
+                except Exception as e:
+                    ultimo_erro = e
+                    continue
+            if df is None:
+                raise ultimo_erro or ValueError("Nenhum separador valido detectado")
         else:
             df = pd.read_excel(io.BytesIO(conteudo))
         # Normaliza nomes das colunas (remove BOM e espacos)
