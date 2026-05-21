@@ -114,8 +114,8 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
 
         texto = str(texto).strip()
         canal = _valor_ou_none(row, colunas_lower, "canal") or "Arquivo"
-        cliente = _valor_ou_none(row, colunas_lower, "cliente") or _valor_ou_none(row, colunas_lower, "cliente_nome")
-        atendente = _valor_ou_none(row, colunas_lower, "atendente") or _valor_ou_none(row, colunas_lower, "atendente_nome")
+        cliente_csv = _valor_ou_none(row, colunas_lower, "cliente") or _valor_ou_none(row, colunas_lower, "cliente_nome")
+        atendente_csv = _valor_ou_none(row, colunas_lower, "atendente") or _valor_ou_none(row, colunas_lower, "atendente_nome")
 
         response = classify_text(texto)
 
@@ -125,6 +125,10 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
 
         data = response.get("data", {}) or {}
         qualidade = data.get("qualidade") or {}
+
+        # CSV tem prioridade. Se não veio, usa o que a IA extraiu do texto.
+        cliente = cliente_csv or (data.get("cliente_nome") or None)
+        atendente = atendente_csv or (data.get("atendente_nome") or None)
 
         try:
             novo_chat = ChannelChat(

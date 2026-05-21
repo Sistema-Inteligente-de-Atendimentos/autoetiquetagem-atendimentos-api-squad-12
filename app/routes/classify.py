@@ -62,10 +62,13 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
     data = response.get("data", {}) or {}
     qualidade = data.get("qualidade") or {}
 
+    cliente_final = req.cliente_nome or (data.get("cliente_nome") or None)
+    atendente_final = req.atendente_nome or (data.get("atendente_nome") or None)
+
     try:
         novo_chat = ChannelChat(
-            cliente_nome=req.cliente_nome,
-            atendente_nome=req.atendente_nome,
+            cliente_nome=cliente_final,
+            atendente_nome=atendente_final,
             canal=req.canal,
         )
         db.add(novo_chat)
