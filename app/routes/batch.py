@@ -23,8 +23,13 @@ EXTENSOES_VALIDAS = {".csv", ".xlsx", ".xls"}
 LIMITE_LINHAS = 50
 
 
+def _normalizar(nome: str) -> str:
+    # Remove BOM, espacos e caracteres invisiveis dos nomes de coluna
+    return nome.replace("﻿", "").strip().lower()
+
+
 def _encontrar_coluna_texto(colunas: List[str]) -> str | None:
-    colunas_lower = {c.lower().strip(): c for c in colunas}
+    colunas_lower = {_normalizar(c): c for c in colunas}
     for nome in COLUNAS_TEXTO:
         if nome in colunas_lower:
             return colunas_lower[nome]
@@ -51,7 +56,7 @@ def _to_int(value, default: int = 0) -> int:
 
 
 def _valor_ou_none(row, colunas_lower, chave) -> str | None:
-    nome_real = colunas_lower.get(chave)
+    nome_real = colunas_lower.get(_normalizar(chave))
     if nome_real is None:
         return None
     val = row.get(nome_real)
@@ -79,9 +84,12 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
 
     try:
         if extensao == ".csv":
-            df = pd.read_csv(io.BytesIO(conteudo), sep=None, engine="python")
+            # utf-8-sig remove o BOM automaticamente se existir
+            df = pd.read_csv(io.BytesIO(conteudo), sep=None, engine="python", encoding="utf-8-sig")
         else:
             df = pd.read_excel(io.BytesIO(conteudo))
+        # Normaliza nomes das colunas (remove BOM e espacos)
+        df.columns = [str(c).replace("﻿", "").strip() for c in df.columns]
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao ler o arquivo: {str(e)}")
 
@@ -101,7 +109,7 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
             detail=f"Nenhuma coluna de texto encontrada. Use uma destas: {', '.join(COLUNAS_TEXTO)}",
         )
 
-    colunas_lower = {c.lower().strip(): c for c in df.columns}
+    colunas_lower = {_normalizar(c): c for c in df.columns}
 
     resultados = []
     erros = []
