@@ -13,6 +13,7 @@ from app.models import (
 )
 from app.routes.classify import router as classify_router
 from app.routes.dashboard import router as dashboard_router
+from app.routes.batch import router as batch_router
 
 
 app = FastAPI(title="Auto-Etiquetagem de Atendimentos - Squad 12")
@@ -65,3 +66,4 @@ def list_chats(db: Session = Depends(get_db)):
 
 app.include_router(classify_router)
 app.include_router(dashboard_router)
+app.include_router(batch_router)
