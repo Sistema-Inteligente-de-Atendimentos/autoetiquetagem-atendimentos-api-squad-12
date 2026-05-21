@@ -31,12 +31,20 @@ def classify_text(text: str):
         - score_final (0-10)
     - resumo (máx 3 linhas)
     - topicos (lista)
-    - cliente_nome: nome do cliente identificado no texto, ou null se não conseguir identificar.
-      Procure por padrões como "Cliente: Nome", assinaturas, apresentações ("Meu nome é...", "Aqui é o..."),
-      ou qualquer menção explícita ao nome do cliente. Retorne APENAS o nome próprio (sem prefixos como "Sr." ou "Sra.").
-    - atendente_nome: nome do atendente identificado no texto, ou null se não conseguir identificar.
-      Procure por padrões como "Atendente: Nome", apresentações ("Aqui é a Maria do suporte..."),
-      ou qualquer menção explícita ao nome do atendente. Retorne APENAS o nome próprio.
+    - cliente_nome: nome PRÓPRIO do cliente, ou null se não conseguir identificar com certeza.
+      IMPORTANTE: "Cliente:" e "Atendente:" são RÓTULOS indicando quem está falando, NÃO são apresentações de nome.
+      O texto logo depois de "Cliente:" é a MENSAGEM do cliente, não o nome dele.
+      Procure o nome do cliente em:
+        * Auto-apresentações: "Meu nome é João", "Aqui é a Ana", "Carlos aqui", "É a Maria"
+        * Quando o atendente chama o cliente: "Oi João!", "Sr. Carlos", "Sra. Maria" (extraia apenas "João", "Carlos", "Maria" - SEM os prefixos Sr./Sra.)
+        * Assinaturas: "Atenciosamente, Pedro"
+      Retorne APENAS o nome próprio em si. Se houver dúvida ou nenhuma menção clara, retorne null.
+    - atendente_nome: nome PRÓPRIO do atendente, ou null se não conseguir identificar com certeza.
+      IMPORTANTE: o texto logo depois de "Atendente:" é a MENSAGEM do atendente, não o nome dele.
+      Procure o nome do atendente em:
+        * Auto-apresentações: "Aqui é a Maria do suporte", "Sou o João, do time técnico"
+        * Quando o cliente chama o atendente: "Obrigado Pedro!", "Valeu João"
+      Retorne APENAS o nome próprio. Se não houver menção clara, retorne null.
 
     TEXTO:
     {text}
