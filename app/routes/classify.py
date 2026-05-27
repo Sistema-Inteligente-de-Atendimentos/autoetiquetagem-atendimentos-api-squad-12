@@ -108,6 +108,16 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
 
         db.commit()
 
+        usage_obj = response.get("usage")
+        usage_dict = None
+        if usage_obj is not None:
+            if hasattr(usage_obj, "model_dump"):
+                usage_dict = usage_obj.model_dump()
+            elif hasattr(usage_obj, "dict"):
+                usage_dict = usage_obj.dict()
+            elif isinstance(usage_obj, dict):
+                usage_dict = usage_obj
+
         return ClassifyResponse(
             status="sucesso",
             chat_id=novo_chat.id,
@@ -116,6 +126,7 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
             mensagem_id=nova_mensagem.id,
             avaliacao_id=nova_avaliacao.id,
             data=data,
+            usage=usage_dict,
         )
 
     except Exception as e:

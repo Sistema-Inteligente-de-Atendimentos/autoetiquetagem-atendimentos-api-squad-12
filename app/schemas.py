@@ -53,6 +53,7 @@ class ClassifyResponse(BaseModel):
     mensagem_id: int
     avaliacao_id: int
     data: dict
+    usage: Optional[dict] = None
 
 
 class CanalStat(BaseModel):
