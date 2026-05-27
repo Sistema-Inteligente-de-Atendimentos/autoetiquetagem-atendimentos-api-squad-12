@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import Base, SessionLocal, engine
@@ -42,8 +43,23 @@ def get_db():
 
 @app.on_event("startup")
 def on_startup() -> None:
-
     Base.metadata.create_all(bind=engine)
+    _aplicar_migrations_simples()
+
+
+def _aplicar_migrations_simples() -> None:
+    """Adiciona colunas novas em tabelas existentes (idempotente)."""
+    statements = [
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "JsonRaw" TEXT',
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AprovadoComoExemplo" BOOLEAN NOT NULL DEFAULT FALSE',
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AprovadoPor" VARCHAR(150)',
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AprovadoEm" TIMESTAMP WITH TIME ZONE',
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "ObservacaoAprovacao" TEXT',
+        'CREATE INDEX IF NOT EXISTS ix_avaliacoes_aprovado_como_exemplo ON avaliacoes ("AprovadoComoExemplo")',
+    ]
+    with engine.begin() as conn:
+        for stmt in statements:
+            conn.execute(text(stmt))
 
 
 @app.get("/health")

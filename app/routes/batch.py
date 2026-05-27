@@ -1,5 +1,6 @@
-import uuid
 import io
+import json
+import uuid
 from typing import List
 
 import pandas as pd
@@ -13,7 +14,7 @@ from app.models import (
     ChannelChatMessage,
     ChannelChatProtocol,
 )
-from app.services.llm_service import classify_text
+from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
 
 router = APIRouter(tags=["Processamento em Lote"])
@@ -142,7 +143,8 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
         cliente_csv = _valor_ou_none(row, colunas_lower, "cliente") or _valor_ou_none(row, colunas_lower, "cliente_nome")
         atendente_csv = _valor_ou_none(row, colunas_lower, "atendente") or _valor_ou_none(row, colunas_lower, "atendente_nome")
 
-        response = classify_text(texto)
+        exemplos = buscar_exemplos_aprovados(db, limite=3, canal=canal)
+        response = classify_text(texto, exemplos=exemplos)
 
         if "error" in response:
             erros.append({"linha": int(idx) + 2, "erro": response["error"]})
@@ -187,6 +189,7 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
                 protocolo_id=novo_protocolo.id,
                 nota=nota,
                 comentario=comentario,
+                json_raw=json.dumps(data, ensure_ascii=False),
             )
             db.add(nova_avaliacao)
             db.flush()

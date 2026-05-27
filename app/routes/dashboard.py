@@ -40,9 +40,14 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
     total_atendimentos = db.query(func.count(ChannelChatProtocol.id)).scalar() or 0
 
+    total_exemplos = db.query(func.count(Avaliacao.id)).filter(
+        Avaliacao.aprovado_como_exemplo.is_(True)
+    ).scalar() or 0
+
     return DashboardStats(
         total_atendimentos=int(total_atendimentos),
         media_qualidade=media_qualidade,
         volume_por_canal=volume_por_canal,
         distribuicao_notas=distribuicao_notas,
+        total_exemplos_aprovados=int(total_exemplos),
     )
