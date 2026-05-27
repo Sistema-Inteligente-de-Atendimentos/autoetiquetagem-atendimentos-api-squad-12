@@ -14,6 +14,7 @@ from app.models import (
     ChannelChatMessage,
     ChannelChatProtocol,
 )
+from app.services.chat_parser import dividir_mensagens
 from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
 
@@ -173,13 +174,22 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
             db.add(novo_protocolo)
             db.flush()
 
-            nova_mensagem = ChannelChatMessage(
-                channel_chat_id=novo_chat.id,
-                protocolo_id=novo_protocolo.id,
-                remetente="arquivo",
-                conteudo=texto,
+            mensagens_divididas = dividir_mensagens(
+                texto,
+                cliente_nome=cliente,
+                atendente_nome=atendente,
             )
-            db.add(nova_mensagem)
+            if not mensagens_divididas:
+                mensagens_divididas = [("cliente", texto)]
+
+            for remetente, conteudo in mensagens_divididas:
+                msg = ChannelChatMessage(
+                    channel_chat_id=novo_chat.id,
+                    protocolo_id=novo_protocolo.id,
+                    remetente=remetente,
+                    conteudo=conteudo,
+                )
+                db.add(msg)
             db.flush()
 
             comentario = _to_text(data.get("resumo"))
