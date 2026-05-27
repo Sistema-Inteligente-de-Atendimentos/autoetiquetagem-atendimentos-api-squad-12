@@ -47,6 +47,7 @@ class ChannelChatProtocol(Base):
         "ChannelChatMessage",
         back_populates="protocolo",
         cascade="all, delete-orphan",
+        order_by="ChannelChatMessage.id",
     )
     avaliacoes = relationship(
         "Avaliacao",

@@ -22,6 +22,7 @@ from app.schemas import (
     MensagemOut,
     ProtocoloDetalheOut,
 )
+from app.services.chat_parser import dividir_mensagens
 from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
 
@@ -85,14 +86,28 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
         db.add(novo_protocolo)
         db.flush()
 
-        nova_mensagem = ChannelChatMessage(
-            channel_chat_id=novo_chat.id,
-            protocolo_id=novo_protocolo.id,
-            remetente=req.remetente,
-            conteudo=req.text,
+        mensagens_divididas = dividir_mensagens(
+            req.text,
+            cliente_nome=cliente_final,
+            atendente_nome=atendente_final,
         )
-        db.add(nova_mensagem)
+
+        if not mensagens_divididas:
+            mensagens_divididas = [(req.remetente or "cliente", req.text)]
+
+        mensagens_criadas = []
+        for remetente, conteudo in mensagens_divididas:
+            msg = ChannelChatMessage(
+                channel_chat_id=novo_chat.id,
+                protocolo_id=novo_protocolo.id,
+                remetente=remetente,
+                conteudo=conteudo,
+            )
+            db.add(msg)
+            mensagens_criadas.append(msg)
         db.flush()
+
+        primeira_mensagem = mensagens_criadas[0]
 
         comentario = _to_text(data.get("resumo"))
         nota = _to_int(qualidade.get("score_final", qualidade.get("nota", 0)))
@@ -123,7 +138,7 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
             chat_id=novo_chat.id,
             protocolo_id=novo_protocolo.id,
             protocolo_numero=novo_protocolo.numero,
-            mensagem_id=nova_mensagem.id,
+            mensagem_id=primeira_mensagem.id,
             avaliacao_id=nova_avaliacao.id,
             data=data,
             usage=usage_dict,
@@ -234,7 +249,7 @@ def get_atendimento_detalhe(protocolo_id: int, db: Session = Depends(get_db)):
 
     mensagens_ordenadas = sorted(
         protocolo.mensagens,
-        key=lambda m: m.enviada_em or m.id,
+        key=lambda m: m.id,
     )
 
     return ProtocoloDetalheOut(
