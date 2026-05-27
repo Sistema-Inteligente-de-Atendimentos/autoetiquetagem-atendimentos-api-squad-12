@@ -1,4 +1,6 @@
+import json
 import uuid
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,13 +15,14 @@ from app.models import (
     ChannelChatProtocol,
 )
 from app.schemas import (
+    AprovarExemploRequest,
     AvaliacaoOut,
     ChatOut,
     ClassifyResponse,
     MensagemOut,
     ProtocoloDetalheOut,
 )
-from app.services.llm_service import classify_text
+from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
 
 router = APIRouter(tags=["Atendimentos"])
@@ -54,7 +57,8 @@ def _to_int(value, default: int = 0) -> int:
 
 @router.post("/classify", response_model=ClassifyResponse)
 def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
-    response = classify_text(req.text)
+    exemplos = buscar_exemplos_aprovados(db, limite=3, canal=req.canal)
+    response = classify_text(req.text, exemplos=exemplos)
 
     if "error" in response:
         raise HTTPException(status_code=500, detail=response["error"])
@@ -97,11 +101,22 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
             protocolo_id=novo_protocolo.id,
             nota=nota,
             comentario=comentario,
+            json_raw=json.dumps(data, ensure_ascii=False),
         )
         db.add(nova_avaliacao)
         db.flush()
 
         db.commit()
+
+        usage_obj = response.get("usage")
+        usage_dict = None
+        if usage_obj is not None:
+            if hasattr(usage_obj, "model_dump"):
+                usage_dict = usage_obj.model_dump()
+            elif hasattr(usage_obj, "dict"):
+                usage_dict = usage_obj.dict()
+            elif isinstance(usage_obj, dict):
+                usage_dict = usage_obj
 
         return ClassifyResponse(
             status="sucesso",
@@ -111,6 +126,7 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
             mensagem_id=nova_mensagem.id,
             avaliacao_id=nova_avaliacao.id,
             data=data,
+            usage=usage_dict,
         )
 
     except Exception as e:
@@ -144,9 +160,60 @@ def list_atendimentos(db: Session = Depends(get_db)):
                 "fechado_em": p.fechado_em,
                 "nota": avaliacao.nota if avaliacao else None,
                 "comentario": avaliacao.comentario if avaliacao else None,
+                "aprovado_como_exemplo": bool(avaliacao.aprovado_como_exemplo) if avaliacao else False,
             }
         )
     return resultado
+
+
+@router.post("/atendimentos/{protocolo_id}/aprovar-exemplo")
+def aprovar_como_exemplo(
+    protocolo_id: int,
+    req: AprovarExemploRequest,
+    db: Session = Depends(get_db),
+):
+    avaliacao = (
+        db.query(Avaliacao)
+        .filter(Avaliacao.protocolo_id == protocolo_id)
+        .first()
+    )
+    if not avaliacao:
+        raise HTTPException(status_code=404, detail="Avaliação não encontrada para este protocolo")
+
+    avaliacao.aprovado_como_exemplo = True
+    avaliacao.aprovado_por = req.revisor.strip() or "Anônimo"
+    avaliacao.aprovado_em = datetime.now(timezone.utc)
+    avaliacao.observacao_aprovacao = (req.observacao or "").strip() or None
+
+    db.commit()
+    db.refresh(avaliacao)
+
+    return {
+        "status": "aprovado",
+        "avaliacao_id": avaliacao.id,
+        "aprovado_por": avaliacao.aprovado_por,
+        "aprovado_em": avaliacao.aprovado_em,
+    }
+
+
+@router.post("/atendimentos/{protocolo_id}/remover-exemplo")
+def remover_exemplo(protocolo_id: int, db: Session = Depends(get_db)):
+    avaliacao = (
+        db.query(Avaliacao)
+        .filter(Avaliacao.protocolo_id == protocolo_id)
+        .first()
+    )
+    if not avaliacao:
+        raise HTTPException(status_code=404, detail="Avaliação não encontrada")
+
+    avaliacao.aprovado_como_exemplo = False
+    avaliacao.aprovado_por = None
+    avaliacao.aprovado_em = None
+    avaliacao.observacao_aprovacao = None
+
+    db.commit()
+
+    return {"status": "removido", "avaliacao_id": avaliacao.id}
 
 
 @router.get("/atendimentos/{protocolo_id}", response_model=ProtocoloDetalheOut)

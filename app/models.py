@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -95,5 +95,11 @@ class Avaliacao(Base):
     nota = Column("Nota", Integer, nullable=True)
     comentario = Column("Comentario", Text, nullable=True)
     avaliado_em = Column("AvaliadoEm", DateTime(timezone=True), server_default=func.now())
+
+    json_raw = Column("JsonRaw", Text, nullable=True)
+    aprovado_como_exemplo = Column("AprovadoComoExemplo", Boolean, default=False, nullable=False, index=True)
+    aprovado_por = Column("AprovadoPor", String(150), nullable=True)
+    aprovado_em = Column("AprovadoEm", DateTime(timezone=True), nullable=True)
+    observacao_aprovacao = Column("ObservacaoAprovacao", Text, nullable=True)
 
     protocolo = relationship("ChannelChatProtocol", back_populates="avaliacoes")

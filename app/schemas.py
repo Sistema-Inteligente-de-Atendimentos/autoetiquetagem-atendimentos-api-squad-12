@@ -20,6 +20,10 @@ class AvaliacaoOut(_ORMModel):
     nota: Optional[int] = None
     comentario: Optional[str] = None
     avaliado_em: Optional[datetime] = None
+    aprovado_como_exemplo: bool = False
+    aprovado_por: Optional[str] = None
+    aprovado_em: Optional[datetime] = None
+    observacao_aprovacao: Optional[str] = None
 
 
 class ChatOut(_ORMModel):
@@ -49,6 +53,7 @@ class ClassifyResponse(BaseModel):
     mensagem_id: int
     avaliacao_id: int
     data: dict
+    usage: Optional[dict] = None
 
 
 class CanalStat(BaseModel):
@@ -66,3 +71,9 @@ class DashboardStats(BaseModel):
     media_qualidade: float
     volume_por_canal: List[CanalStat]
     distribuicao_notas: List[NotaStat]
+    total_exemplos_aprovados: int = 0
+
+
+class AprovarExemploRequest(BaseModel):
+    revisor: str
+    observacao: Optional[str] = None

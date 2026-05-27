@@ -1,8 +1,14 @@
+import json
 import os
 import re
-import json
-from openai import OpenAI
+from typing import List, Optional
+
 from dotenv import load_dotenv
+from openai import OpenAI
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+
+from app.models import Avaliacao, ChannelChat, ChannelChatProtocol
 
 load_dotenv()
 
@@ -12,10 +18,70 @@ client = OpenAI(
 )
 
 
-def classify_text(text: str):
+def buscar_exemplos_aprovados(
+    db: Session,
+    limite: int = 3,
+    canal: Optional[str] = None,
+) -> List[Avaliacao]:
+    query = (
+        db.query(Avaliacao)
+        .options(joinedload(Avaliacao.protocolo).joinedload(ChannelChatProtocol.mensagens))
+        .filter(Avaliacao.aprovado_como_exemplo.is_(True))
+        .filter(Avaliacao.json_raw.isnot(None))
+    )
+
+    if canal:
+        query = query.join(ChannelChatProtocol).join(ChannelChat).filter(
+            ChannelChat.canal == canal
+        )
+
+    exemplos = query.order_by(func.random()).limit(limite).all()
+    return exemplos
+
+
+def _formatar_exemplos(exemplos: List[Avaliacao]) -> str:
+    if not exemplos:
+        return ""
+
+    blocos = []
+    for ex in exemplos:
+        try:
+            classificacao = json.loads(ex.json_raw or "{}")
+        except Exception:
+            continue
+
+        mensagens = ex.protocolo.mensagens if ex.protocolo else []
+        trecho = mensagens[0].conteudo[:250] if mensagens else "(sem texto)"
+
+        qualidade = classificacao.get("qualidade", {}) or {}
+
+        bloco = f"""---
+Texto: "{trecho}..."
+Classificação correta:
+  categoria: "{classificacao.get('categoria', 'N/A')}"
+  intencao: "{classificacao.get('intencao', 'N/A')}"
+  sentimento: "{classificacao.get('sentimento', 'N/A')}"
+  criticidade: "{classificacao.get('criticidade', 'N/A')}"
+  score_final: {qualidade.get('score_final', 'N/A')}"""
+        blocos.append(bloco)
+
+    if not blocos:
+        return ""
+
+    return (
+        "\n\nEXEMPLOS DE CLASSIFICAÇÕES JÁ VALIDADAS POR ESPECIALISTAS HUMANOS "
+        "(siga o mesmo padrão e critérios):\n"
+        + "\n".join(blocos)
+        + "\n---\n"
+    )
+
+
+def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None):
+    exemplos_texto = _formatar_exemplos(exemplos or [])
+
     prompt = f"""
     Você é um sistema de classificação de atendimentos.
-
+    {exemplos_texto}
     Analise o texto abaixo e retorne um JSON válido com:
 
     - categoria
@@ -80,12 +146,10 @@ def classify_text(text: str):
     )
 
     content = response.choices[0].message.content
-
     clean_content = re.sub(r"```json|```", "", content).strip()
 
     try:
         parsed = json.loads(clean_content)
-
         return {
             "data": parsed,
             "usage": response.usage
