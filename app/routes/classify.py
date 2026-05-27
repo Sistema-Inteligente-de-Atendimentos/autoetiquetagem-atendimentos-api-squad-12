@@ -249,7 +249,7 @@ def get_atendimento_detalhe(protocolo_id: int, db: Session = Depends(get_db)):
 
     mensagens_ordenadas = sorted(
         protocolo.mensagens,
-        key=lambda m: m.enviada_em or m.id,
+        key=lambda m: m.id,
     )
 
     return ProtocoloDetalheOut(
