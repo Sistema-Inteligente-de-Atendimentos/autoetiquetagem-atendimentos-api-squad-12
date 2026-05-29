@@ -104,3 +104,13 @@ class Avaliacao(Base):
     observacao_aprovacao = Column("ObservacaoAprovacao", Text, nullable=True)
 
     protocolo = relationship("ChannelChatProtocol", back_populates="avaliacoes")
+
+
+class CronEstado(Base):
+    __tablename__ = "cron_estado"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fonte = Column("Fonte", String(500), nullable=False, unique=True, index=True)
+    ultima_linha = Column("UltimaLinha", Integer, nullable=False, default=0)
+    total_processados = Column("TotalProcessados", Integer, nullable=False, default=0)
+    atualizado_em = Column("AtualizadoEm", DateTime(timezone=True), nullable=True)
