@@ -120,7 +120,6 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
         primeira_mensagem = mensagens_criadas[0]
 
         comentario = _to_text(data.get("resumo"))
-        # score_final já vem recalculado (média ponderada) por validar_classificacao
         nota = _to_float(qualidade.get("score_final", 0))
 
         nova_avaliacao = Avaliacao(
@@ -194,7 +193,6 @@ def list_atendimentos(db: Session = Depends(get_db)):
 
 @router.get("/atendimentos/export")
 def export_atendimentos(db: Session = Depends(get_db)):
-    """Exporta todos os atendimentos em CSV (para relatórios externos)."""
     protocolos = (
         db.query(ChannelChatProtocol)
         .options(
@@ -231,7 +229,6 @@ def export_atendimentos(db: Session = Depends(get_db)):
     headers = {
         "Content-Disposition": f'attachment; filename="atendimentos_{timestamp}.csv"'
     }
-    # BOM no início para o Excel abrir acentos corretamente
     conteudo = "﻿" + buffer.getvalue()
     return StreamingResponse(
         iter([conteudo]),

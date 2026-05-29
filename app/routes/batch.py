@@ -200,7 +200,6 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
             db.flush()
 
             comentario = _to_text(data.get("resumo"))
-            # score_final já vem recalculado (média ponderada) por validar_classificacao
             nota = _to_float(qualidade.get("score_final", 0))
 
             nova_avaliacao = Avaliacao(

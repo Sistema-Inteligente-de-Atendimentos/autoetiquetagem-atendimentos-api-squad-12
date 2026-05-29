@@ -160,7 +160,6 @@ def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None):
 
     try:
         parsed = json.loads(clean_content)
-        # Normaliza contra a taxonomia fechada e recalcula o score ponderado
         parsed = validar_classificacao(parsed)
         return {
             "data": parsed,

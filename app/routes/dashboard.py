@@ -29,7 +29,6 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         .group_by(Avaliacao.nota)
         .all()
     )
-    # Agrupa por faixa inteira (7.5 cai no bucket 8). Soma para não perder notas.
     notas_map: dict = {}
     for nota, total in notas_rows:
         bucket = max(1, min(10, int(round(float(nota)))))

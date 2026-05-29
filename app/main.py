@@ -48,7 +48,6 @@ def on_startup() -> None:
 
 
 def _aplicar_migrations_simples() -> None:
-    """Adiciona colunas novas em tabelas existentes (idempotente)."""
     statements = [
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "JsonRaw" TEXT',
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AprovadoComoExemplo" BOOLEAN NOT NULL DEFAULT FALSE',
