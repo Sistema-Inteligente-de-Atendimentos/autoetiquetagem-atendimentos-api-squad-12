@@ -48,7 +48,6 @@ def on_startup() -> None:
 
 
 def _aplicar_migrations_simples() -> None:
-    """Adiciona colunas novas em tabelas existentes (idempotente)."""
     statements = [
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "JsonRaw" TEXT',
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AprovadoComoExemplo" BOOLEAN NOT NULL DEFAULT FALSE',
@@ -56,6 +55,7 @@ def _aplicar_migrations_simples() -> None:
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AprovadoEm" TIMESTAMP WITH TIME ZONE',
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "ObservacaoAprovacao" TEXT',
         'CREATE INDEX IF NOT EXISTS ix_avaliacoes_aprovado_como_exemplo ON avaliacoes ("AprovadoComoExemplo")',
+        'ALTER TABLE avaliacoes ALTER COLUMN "Nota" TYPE DOUBLE PRECISION USING "Nota"::double precision',
     ]
     with engine.begin() as conn:
         for stmt in statements:

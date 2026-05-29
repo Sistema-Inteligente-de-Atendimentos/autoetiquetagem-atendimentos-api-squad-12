@@ -8,6 +8,12 @@ from openai import OpenAI
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.taxonomy import (
+    CATEGORIAS,
+    CRITICIDADES,
+    SENTIMENTOS,
+    validar_classificacao,
+)
 from app.models import Avaliacao, ChannelChat, ChannelChatProtocol
 
 load_dotenv()
@@ -79,15 +85,19 @@ Classificação correta:
 def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None):
     exemplos_texto = _formatar_exemplos(exemplos or [])
 
+    categorias_str = ", ".join(CATEGORIAS)
+    sentimentos_str = ", ".join(SENTIMENTOS)
+    criticidades_str = ", ".join(CRITICIDADES)
+
     prompt = f"""
     Você é um sistema de classificação de atendimentos.
     {exemplos_texto}
     Analise o texto abaixo e retorne um JSON válido com:
 
-    - categoria
+    - categoria: escolha EXATAMENTE uma destas opções (não invente outras): {categorias_str}. Se nenhuma encaixar, use "Outros".
     - intencao
-    - sentimento (Positivo, Neutro, Negativo)
-    - criticidade (Baixa, Média, Alta)
+    - sentimento: escolha uma destas: {sentimentos_str}
+    - criticidade: escolha uma destas: {criticidades_str}
     - sla_urgencia
     - qualidade:
         - empatia (0-10)
@@ -150,6 +160,7 @@ def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None):
 
     try:
         parsed = json.loads(clean_content)
+        parsed = validar_classificacao(parsed)
         return {
             "data": parsed,
             "usage": response.usage

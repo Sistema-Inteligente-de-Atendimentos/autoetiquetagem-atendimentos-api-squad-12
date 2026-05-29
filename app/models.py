@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, Float, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -93,7 +93,7 @@ class Avaliacao(Base):
         nullable=False,
         index=True,
     )
-    nota = Column("Nota", Integer, nullable=True)
+    nota = Column("Nota", Float, nullable=True)
     comentario = Column("Comentario", Text, nullable=True)
     avaliado_em = Column("AvaliadoEm", DateTime(timezone=True), server_default=func.now())
 

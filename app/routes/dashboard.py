@@ -27,10 +27,12 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         db.query(Avaliacao.nota, func.count(Avaliacao.id))
         .filter(Avaliacao.nota.isnot(None))
         .group_by(Avaliacao.nota)
-        .order_by(Avaliacao.nota.asc())
         .all()
     )
-    notas_map = {int(nota): int(total) for nota, total in notas_rows}
+    notas_map: dict = {}
+    for nota, total in notas_rows:
+        bucket = max(1, min(10, int(round(float(nota)))))
+        notas_map[bucket] = notas_map.get(bucket, 0) + int(total)
     distribuicao_notas = [
         NotaStat(nota=n, total=notas_map.get(n, 0)) for n in range(1, 11)
     ]
