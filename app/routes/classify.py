@@ -1,9 +1,12 @@
+import csv
+import io
 import json
 import uuid
 from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
@@ -52,6 +55,13 @@ def _to_text(value) -> str | None:
 def _to_int(value, default: int = 0) -> int:
     try:
         return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value, default: float = 0.0) -> float:
+    try:
+        return round(float(value), 2)
     except (TypeError, ValueError):
         return default
 
@@ -110,7 +120,8 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
         primeira_mensagem = mensagens_criadas[0]
 
         comentario = _to_text(data.get("resumo"))
-        nota = _to_int(qualidade.get("score_final", qualidade.get("nota", 0)))
+        # score_final já vem recalculado (média ponderada) por validar_classificacao
+        nota = _to_float(qualidade.get("score_final", 0))
 
         nova_avaliacao = Avaliacao(
             protocolo_id=novo_protocolo.id,
@@ -179,6 +190,54 @@ def list_atendimentos(db: Session = Depends(get_db)):
             }
         )
     return resultado
+
+
+@router.get("/atendimentos/export")
+def export_atendimentos(db: Session = Depends(get_db)):
+    """Exporta todos os atendimentos em CSV (para relatórios externos)."""
+    protocolos = (
+        db.query(ChannelChatProtocol)
+        .options(
+            joinedload(ChannelChatProtocol.chat),
+            joinedload(ChannelChatProtocol.avaliacoes),
+        )
+        .order_by(ChannelChatProtocol.aberto_em.desc())
+        .all()
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow([
+        "protocolo_id", "numero", "cliente", "atendente", "canal",
+        "aberto_em", "nota", "aprovado_como_exemplo", "comentario",
+    ])
+
+    for p in protocolos:
+        avaliacao = p.avaliacoes[0] if p.avaliacoes else None
+        writer.writerow([
+            p.id,
+            p.numero,
+            (p.chat.cliente_nome if p.chat else "") or "",
+            (p.chat.atendente_nome if p.chat else "") or "",
+            (p.chat.canal if p.chat else "") or "",
+            p.aberto_em.isoformat() if p.aberto_em else "",
+            avaliacao.nota if avaliacao and avaliacao.nota is not None else "",
+            "Sim" if (avaliacao and avaliacao.aprovado_como_exemplo) else "Não",
+            (avaliacao.comentario if avaliacao else "") or "",
+        ])
+
+    buffer.seek(0)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    headers = {
+        "Content-Disposition": f'attachment; filename="atendimentos_{timestamp}.csv"'
+    }
+    # BOM no início para o Excel abrir acentos corretamente
+    conteudo = "﻿" + buffer.getvalue()
+    return StreamingResponse(
+        iter([conteudo]),
+        media_type="text/csv; charset=utf-8",
+        headers=headers,
+    )
 
 
 @router.post("/atendimentos/{protocolo_id}/aprovar-exemplo")

@@ -17,7 +17,7 @@ class MensagemOut(_ORMModel):
 
 class AvaliacaoOut(_ORMModel):
     id: int
-    nota: Optional[int] = None
+    nota: Optional[float] = None
     comentario: Optional[str] = None
     avaliado_em: Optional[datetime] = None
     aprovado_como_exemplo: bool = False

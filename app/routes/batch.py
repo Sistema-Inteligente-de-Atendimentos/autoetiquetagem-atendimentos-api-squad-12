@@ -57,6 +57,13 @@ def _to_int(value, default: int = 0) -> int:
         return default
 
 
+def _to_float(value, default: float = 0.0) -> float:
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return default
+
+
 def _valor_ou_none(row, colunas_lower, chave) -> str | None:
     nome_real = colunas_lower.get(_normalizar(chave))
     if nome_real is None:
@@ -193,7 +200,8 @@ async def classify_batch(file: UploadFile = File(...), db: Session = Depends(get
             db.flush()
 
             comentario = _to_text(data.get("resumo"))
-            nota = _to_int(qualidade.get("score_final", qualidade.get("nota", 0)))
+            # score_final já vem recalculado (média ponderada) por validar_classificacao
+            nota = _to_float(qualidade.get("score_final", 0))
 
             nova_avaliacao = Avaliacao(
                 protocolo_id=novo_protocolo.id,
