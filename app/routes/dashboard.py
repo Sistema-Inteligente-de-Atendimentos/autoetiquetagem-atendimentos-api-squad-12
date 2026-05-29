@@ -26,6 +26,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     notas_rows = (
         db.query(Avaliacao.nota, func.count(Avaliacao.id))
         .filter(Avaliacao.nota.isnot(None))
+        .group_by(Avaliacao.nota)
         .all()
     )
     # Agrupa por faixa inteira (7.5 cai no bucket 8). Soma para não perder notas.
