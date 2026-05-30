@@ -217,3 +217,11 @@ def cron_status(db: Session = Depends(get_db)):
         }
         for e in estados
     ]
+
+
+@router.post("/reset")
+def cron_reset(db: Session = Depends(get_db)):
+    total = db.query(CronEstado).count()
+    db.query(CronEstado).delete()
+    db.commit()
+    return {"status": "resetado", "fontes_removidas": total}
