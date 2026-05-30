@@ -212,6 +212,16 @@ def desativar_planilha(planilha_id: int, db: Session = Depends(get_db)):
     return {"status": "desativada", "id": planilha_id}
 
 
+@router.post("/planilhas/{planilha_id}/reset")
+def reset_planilha(planilha_id: int, db: Session = Depends(get_db)):
+    p = db.query(CronConfig).filter(CronConfig.id == planilha_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Planilha não encontrada")
+    removidos = db.query(CronEstado).filter(CronEstado.fonte == p.url).delete()
+    db.commit()
+    return {"status": "resetado", "id": planilha_id, "contador_removido": removidos}
+
+
 @router.delete("/planilhas/{planilha_id}")
 def remove_planilha(planilha_id: int, db: Session = Depends(get_db)):
     p = db.query(CronConfig).filter(CronConfig.id == planilha_id).first()
