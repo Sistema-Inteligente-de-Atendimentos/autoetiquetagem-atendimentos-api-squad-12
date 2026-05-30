@@ -17,7 +17,7 @@ from app.models import (
     CronConfig,
     CronEstado,
 )
-from app.routes.categorias import get_categorias_extras
+from app.routes.categorias import get_categorias_extras, normalizar_url_planilha
 from app.services.chat_parser import dividir_mensagens
 from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
@@ -84,7 +84,7 @@ def _get_urls_ativas(db: Session) -> List[str]:
 
 
 def _ler_planilha(url: str) -> pd.DataFrame:
-    df = pd.read_csv(url, encoding="utf-8-sig")
+    df = pd.read_csv(normalizar_url_planilha(url), encoding="utf-8-sig")
     df.columns = [str(c).replace("﻿", "").strip() for c in df.columns]
     return df
 
