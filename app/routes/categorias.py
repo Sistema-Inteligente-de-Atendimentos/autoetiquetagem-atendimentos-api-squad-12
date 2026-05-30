@@ -1,4 +1,5 @@
 import io
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -13,6 +14,42 @@ from app.models import CategoriaCustom, CronConfig, CronEstado
 
 
 router = APIRouter(prefix="/config", tags=["Configuração"])
+
+
+def normalizar_url_planilha(url: str) -> str:
+    """Converte qualquer formato de URL do Google Sheets para a URL de export CSV.
+
+    Aceita:
+    - .../spreadsheets/d/ID/edit?usp=sharing
+    - .../spreadsheets/d/ID/edit#gid=123
+    - .../spreadsheets/d/ID/export?format=csv&gid=0
+    - só o ID da planilha
+    Se já for uma URL de export CSV ou não for do Google Sheets, retorna como está.
+    """
+    url = (url or "").strip()
+    if not url:
+        return url
+
+    # Já é export CSV
+    if "format=csv" in url:
+        return url
+
+    # Extrai o ID da planilha
+    match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", url)
+    if match:
+        sheet_id = match.group(1)
+    elif re.fullmatch(r"[a-zA-Z0-9-_]{20,}", url):
+        # usuário colou só o ID
+        sheet_id = url
+    else:
+        # não reconheceu como Google Sheets, devolve original
+        return url
+
+    # Extrai o gid se houver
+    gid_match = re.search(r"[#&?]gid=(\d+)", url)
+    gid = gid_match.group(1) if gid_match else "0"
+
+    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
 
 
 class CategoriaIn(BaseModel):
@@ -90,8 +127,16 @@ class PlanilhaIn(BaseModel):
 
 def _testar_url(url: str) -> int:
     try:
-        df = pd.read_csv(url, encoding="utf-8-sig", nrows=5)
-        return len(pd.read_csv(url, encoding="utf-8-sig"))
+        df = pd.read_csv(url, encoding="utf-8-sig")
+        colunas = [str(c).replace("﻿", "").strip().lower() for c in df.columns]
+        if not any(c in colunas for c in ["texto", "atendimento", "mensagem", "conteudo", "text", "message"]):
+            raise HTTPException(
+                status_code=400,
+                detail="Planilha lida, mas não encontrei a coluna 'texto'. Verifique se a planilha está pública e tem o cabeçalho correto.",
+            )
+        return len(df)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"URL inacessível ou inválida: {str(e)}")
 
@@ -122,9 +167,11 @@ def list_planilhas(db: Session = Depends(get_db)):
 
 @router.post("/planilhas")
 def add_planilha(req: PlanilhaIn, db: Session = Depends(get_db)):
-    url = (req.url or "").strip()
-    if not url:
+    url_raw = (req.url or "").strip()
+    if not url_raw:
         raise HTTPException(status_code=400, detail="URL não pode ser vazia")
+
+    url = normalizar_url_planilha(url_raw)
 
     existente = db.query(CronConfig).filter(CronConfig.url == url).first()
     if existente:
