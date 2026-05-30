@@ -25,6 +25,7 @@ from app.schemas import (
     MensagemOut,
     ProtocoloDetalheOut,
 )
+from app.routes.categorias import get_categorias_extras
 from app.services.chat_parser import dividir_mensagens
 from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
@@ -69,7 +70,8 @@ def _to_float(value, default: float = 0.0) -> float:
 @router.post("/classify", response_model=ClassifyResponse)
 def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
     exemplos = buscar_exemplos_aprovados(db, limite=3, canal=req.canal)
-    response = classify_text(req.text, exemplos=exemplos)
+    categorias_extras = get_categorias_extras(db)
+    response = classify_text(req.text, exemplos=exemplos, categorias_extras=categorias_extras)
 
     if "error" in response:
         raise HTTPException(status_code=500, detail=response["error"])

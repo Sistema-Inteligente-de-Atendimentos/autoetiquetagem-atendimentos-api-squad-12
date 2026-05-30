@@ -16,6 +16,7 @@ from app.routes.classify import router as classify_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.batch import router as batch_router
 from app.routes.cron import router as cron_router
+from app.routes.categorias import router as categorias_router
 
 
 app = FastAPI(title="Auto-Etiquetagem de Atendimentos - Squad 12")
@@ -85,3 +86,4 @@ app.include_router(classify_router)
 app.include_router(dashboard_router)
 app.include_router(batch_router)
 app.include_router(cron_router)
+app.include_router(categorias_router)
