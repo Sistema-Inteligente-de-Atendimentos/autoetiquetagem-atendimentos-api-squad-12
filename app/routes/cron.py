@@ -14,6 +14,7 @@ from app.models import (
     ChannelChat,
     ChannelChatMessage,
     ChannelChatProtocol,
+    CronConfig,
     CronEstado,
 )
 from app.routes.categorias import get_categorias_extras
@@ -66,14 +67,20 @@ def _to_int(value, default: int = 0) -> int:
 
 
 def _montar_url_csv() -> Optional[str]:
-    url = os.getenv("GOOGLE_SHEET_CSV_URL")
-    if url:
-        return url
     sheet_id = os.getenv("GOOGLE_SHEET_ID")
     if sheet_id:
         gid = os.getenv("GOOGLE_SHEET_GID", "0")
         return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-    return None
+    return os.getenv("GOOGLE_SHEET_CSV_URL")
+
+
+def _get_urls_ativas(db: Session) -> List[str]:
+    configs = db.query(CronConfig).filter(CronConfig.ativo.is_(True)).all()
+    urls_banco = [c.url for c in configs]
+    fallback = _montar_url_csv()
+    if not urls_banco and fallback:
+        return [fallback]
+    return urls_banco
 
 
 def _ler_planilha(url: str) -> pd.DataFrame:
@@ -131,60 +138,67 @@ def _processar_linha(db: Session, texto: str, canal: str, cliente, atendente) ->
     ))
 
 
-def _executar_analise() -> None:
-    url = _montar_url_csv()
-    if not url:
-        return
-
-    db = SessionLocal()
+def _processar_url(db: Session, url: str) -> int:
     try:
         df = _ler_planilha(url)
-        if df.empty:
-            return
+    except Exception:
+        return 0
 
-        col_texto = _encontrar_coluna_texto(list(df.columns))
-        if col_texto is None:
-            return
+    if df.empty:
+        return 0
 
-        colunas_lower = {_normalizar(c): c for c in df.columns}
+    col_texto = _encontrar_coluna_texto(list(df.columns))
+    if col_texto is None:
+        return 0
 
-        estado = db.query(CronEstado).filter(CronEstado.fonte == url).first()
-        if estado is None:
-            estado = CronEstado(fonte=url, ultima_linha=0, total_processados=0)
-            db.add(estado)
-            db.flush()
+    colunas_lower = {_normalizar(c): c for c in df.columns}
 
-        inicio = estado.ultima_linha
-        total_linhas = len(df)
-        if inicio >= total_linhas:
-            estado.atualizado_em = datetime.now(timezone.utc)
-            db.commit()
-            return
+    estado = db.query(CronEstado).filter(CronEstado.fonte == url).first()
+    if estado is None:
+        estado = CronEstado(fonte=url, ultima_linha=0, total_processados=0)
+        db.add(estado)
+        db.flush()
 
-        novas = df.iloc[inicio:]
-        processados = 0
-
-        for _, row in novas.iterrows():
-            texto = row.get(col_texto)
-            if pd.isna(texto) or not str(texto).strip():
-                continue
-            texto = str(texto).strip()
-            canal = _valor_ou_none(row, colunas_lower, "canal") or "Planilha"
-            cliente = _valor_ou_none(row, colunas_lower, "cliente") or _valor_ou_none(row, colunas_lower, "cliente_nome")
-            atendente = _valor_ou_none(row, colunas_lower, "atendente") or _valor_ou_none(row, colunas_lower, "atendente_nome")
-
-            try:
-                _processar_linha(db, texto, canal, cliente, atendente)
-                db.commit()
-                processados += 1
-            except Exception:
-                db.rollback()
-                continue
-
-        estado.ultima_linha = total_linhas
-        estado.total_processados = (estado.total_processados or 0) + processados
+    inicio = estado.ultima_linha
+    total_linhas = len(df)
+    if inicio >= total_linhas:
         estado.atualizado_em = datetime.now(timezone.utc)
         db.commit()
+        return 0
+
+    novas = df.iloc[inicio:]
+    processados = 0
+
+    for _, row in novas.iterrows():
+        texto = row.get(col_texto)
+        if pd.isna(texto) or not str(texto).strip():
+            continue
+        texto = str(texto).strip()
+        canal = _valor_ou_none(row, colunas_lower, "canal") or "Planilha"
+        cliente = _valor_ou_none(row, colunas_lower, "cliente") or _valor_ou_none(row, colunas_lower, "cliente_nome")
+        atendente = _valor_ou_none(row, colunas_lower, "atendente") or _valor_ou_none(row, colunas_lower, "atendente_nome")
+
+        try:
+            _processar_linha(db, texto, canal, cliente, atendente)
+            db.commit()
+            processados += 1
+        except Exception:
+            db.rollback()
+            continue
+
+    estado.ultima_linha = total_linhas
+    estado.total_processados = (estado.total_processados or 0) + processados
+    estado.atualizado_em = datetime.now(timezone.utc)
+    db.commit()
+    return processados
+
+
+def _executar_analise() -> None:
+    db = SessionLocal()
+    try:
+        urls = _get_urls_ativas(db)
+        for url in urls:
+            _processar_url(db, url)
     finally:
         db.close()
 
@@ -200,8 +214,14 @@ def cron_analisar(
     if authorization != f"Bearer {token}":
         raise HTTPException(status_code=401, detail="Não autorizado")
 
-    if not _montar_url_csv():
-        raise HTTPException(status_code=400, detail="GOOGLE_SHEET_ID ou GOOGLE_SHEET_CSV_URL não configurado")
+    db_check = SessionLocal()
+    try:
+        urls = _get_urls_ativas(db_check)
+    finally:
+        db_check.close()
+
+    if not urls:
+        raise HTTPException(status_code=400, detail="Nenhuma planilha ativa configurada. Adicione uma em /config/planilhas")
 
     background_tasks.add_task(_executar_analise)
     return {"status": "processando", "mensagem": "Análise da planilha iniciada em background"}

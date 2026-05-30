@@ -1,12 +1,15 @@
+import io
+from datetime import datetime, timezone
 from typing import List, Optional
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import get_db
 from app.core.taxonomy import CATEGORIAS_FIXAS
-from app.models import CategoriaCustom
+from app.models import CategoriaCustom, CronConfig, CronEstado
 
 
 router = APIRouter(prefix="/config", tags=["Configuração"])
@@ -75,3 +78,99 @@ def remove_categoria(categoria_id: int, db: Session = Depends(get_db)):
     db.delete(c)
     db.commit()
     return {"status": "removida", "id": categoria_id}
+
+
+# ── Planilhas ──────────────────────────────────────────────────────────────────
+
+class PlanilhaIn(BaseModel):
+    url: str
+    nome: Optional[str] = None
+    criado_por: Optional[str] = None
+
+
+def _testar_url(url: str) -> int:
+    try:
+        df = pd.read_csv(url, encoding="utf-8-sig", nrows=5)
+        return len(pd.read_csv(url, encoding="utf-8-sig"))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"URL inacessível ou inválida: {str(e)}")
+
+
+def _serializar_planilha(p: CronConfig, estado: Optional[CronEstado]) -> dict:
+    return {
+        "id": p.id,
+        "url": p.url,
+        "nome": p.nome,
+        "ativo": p.ativo,
+        "criado_por": p.criado_por,
+        "criado_em": p.criado_em,
+        "ultima_linha": estado.ultima_linha if estado else 0,
+        "total_processados": estado.total_processados if estado else 0,
+        "atualizado_em": estado.atualizado_em if estado else None,
+    }
+
+
+@router.get("/planilhas")
+def list_planilhas(db: Session = Depends(get_db)):
+    planilhas = db.query(CronConfig).order_by(CronConfig.criado_em.desc()).all()
+    resultado = []
+    for p in planilhas:
+        estado = db.query(CronEstado).filter(CronEstado.fonte == p.url).first()
+        resultado.append(_serializar_planilha(p, estado))
+    return resultado
+
+
+@router.post("/planilhas")
+def add_planilha(req: PlanilhaIn, db: Session = Depends(get_db)):
+    url = (req.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL não pode ser vazia")
+
+    existente = db.query(CronConfig).filter(CronConfig.url == url).first()
+    if existente:
+        raise HTTPException(status_code=400, detail="Esta planilha já está cadastrada")
+
+    total_linhas = _testar_url(url)
+
+    nova = CronConfig(
+        url=url,
+        nome=(req.nome or "").strip() or None,
+        criado_por=(req.criado_por or "").strip() or None,
+        ativo=True,
+    )
+    db.add(nova)
+    db.commit()
+    db.refresh(nova)
+
+    return {**_serializar_planilha(nova, None), "linhas_detectadas": total_linhas}
+
+
+@router.patch("/planilhas/{planilha_id}/ativar")
+def ativar_planilha(planilha_id: int, db: Session = Depends(get_db)):
+    p = db.query(CronConfig).filter(CronConfig.id == planilha_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Planilha não encontrada")
+    p.ativo = True
+    db.commit()
+    return {"status": "ativada", "id": planilha_id}
+
+
+@router.patch("/planilhas/{planilha_id}/desativar")
+def desativar_planilha(planilha_id: int, db: Session = Depends(get_db)):
+    p = db.query(CronConfig).filter(CronConfig.id == planilha_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Planilha não encontrada")
+    p.ativo = False
+    db.commit()
+    return {"status": "desativada", "id": planilha_id}
+
+
+@router.delete("/planilhas/{planilha_id}")
+def remove_planilha(planilha_id: int, db: Session = Depends(get_db)):
+    p = db.query(CronConfig).filter(CronConfig.id == planilha_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Planilha não encontrada")
+    db.query(CronEstado).filter(CronEstado.fonte == p.url).delete()
+    db.delete(p)
+    db.commit()
+    return {"status": "removida", "id": planilha_id}

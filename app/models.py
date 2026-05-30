@@ -116,6 +116,17 @@ class CronEstado(Base):
     atualizado_em = Column("AtualizadoEm", DateTime(timezone=True), nullable=True)
 
 
+class CronConfig(Base):
+    __tablename__ = "cron_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    url = Column("Url", Text, nullable=False, unique=True)
+    nome = Column("Nome", String(150), nullable=True)
+    ativo = Column("Ativo", Boolean, default=True, nullable=False)
+    criado_por = Column("CriadoPor", String(150), nullable=True)
+    criado_em = Column("CriadoEm", DateTime(timezone=True), server_default=func.now())
+
+
 class CategoriaCustom(Base):
     __tablename__ = "categorias_custom"
 
