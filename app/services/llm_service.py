@@ -9,9 +9,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.taxonomy import (
-    CATEGORIAS,
+    CATEGORIAS_FIXAS,
     CRITICIDADES,
     SENTIMENTOS,
+    montar_categorias,
     validar_classificacao,
 )
 from app.models import Avaliacao, ChannelChat, ChannelChatProtocol
@@ -82,10 +83,11 @@ Classificação correta:
     )
 
 
-def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None):
+def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None, categorias_extras: Optional[List[str]] = None):
     exemplos_texto = _formatar_exemplos(exemplos or [])
 
-    categorias_str = ", ".join(CATEGORIAS)
+    categorias_disponiveis = montar_categorias(categorias_extras)
+    categorias_str = ", ".join(categorias_disponiveis)
     sentimentos_str = ", ".join(SENTIMENTOS)
     criticidades_str = ", ".join(CRITICIDADES)
 
@@ -160,7 +162,7 @@ def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None):
 
     try:
         parsed = json.loads(clean_content)
-        parsed = validar_classificacao(parsed)
+        parsed = validar_classificacao(parsed, categorias=categorias_disponiveis)
         return {
             "data": parsed,
             "usage": response.usage

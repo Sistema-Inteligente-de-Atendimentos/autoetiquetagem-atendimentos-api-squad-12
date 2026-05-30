@@ -114,3 +114,12 @@ class CronEstado(Base):
     ultima_linha = Column("UltimaLinha", Integer, nullable=False, default=0)
     total_processados = Column("TotalProcessados", Integer, nullable=False, default=0)
     atualizado_em = Column("AtualizadoEm", DateTime(timezone=True), nullable=True)
+
+
+class CategoriaCustom(Base):
+    __tablename__ = "categorias_custom"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nome = Column("Nome", String(100), nullable=False, unique=True, index=True)
+    criada_por = Column("CriadaPor", String(150), nullable=True)
+    criado_em = Column("CriadoEm", DateTime(timezone=True), server_default=func.now())

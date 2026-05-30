@@ -1,7 +1,7 @@
 import unicodedata
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-CATEGORIAS: List[str] = [
+CATEGORIAS_FIXAS: List[str] = [
     "Financeiro",
     "Técnico",
     "Comercial",
@@ -12,6 +12,8 @@ CATEGORIAS: List[str] = [
     "Dúvida",
     "Outros",
 ]
+
+CATEGORIAS: List[str] = list(CATEGORIAS_FIXAS)
 
 SENTIMENTOS: List[str] = ["Positivo", "Neutro", "Negativo"]
 
@@ -27,6 +29,18 @@ PESOS_QUALIDADE: Dict[str, float] = {
     "objetividade": 0.25,
     "resolutividade": 0.25,
 }
+
+
+def montar_categorias(extras: Optional[List[str]] = None) -> List[str]:
+    base = list(CATEGORIAS_FIXAS)
+    if not extras:
+        return base
+    fixas_lower = {c.lower() for c in base}
+    for nome in extras:
+        if nome and nome.strip() and nome.strip().lower() not in fixas_lower:
+            base.append(nome.strip())
+            fixas_lower.add(nome.strip().lower())
+    return base
 
 
 def _normalizar(texto: str) -> str:
@@ -70,10 +84,12 @@ def calcular_score_final(qualidade: dict) -> float:
     return round(total / soma_pesos, 2)
 
 
-def validar_classificacao(data: dict) -> dict:
+def validar_classificacao(data: dict, categorias: Optional[List[str]] = None) -> dict:
     data = data or {}
 
-    data["categoria"] = _casar_opcao(data.get("categoria"), CATEGORIAS, CATEGORIA_PADRAO)
+    categorias_validas = categorias if categorias else CATEGORIAS_FIXAS
+
+    data["categoria"] = _casar_opcao(data.get("categoria"), categorias_validas, CATEGORIA_PADRAO)
     data["sentimento"] = _casar_opcao(data.get("sentimento"), SENTIMENTOS, SENTIMENTO_PADRAO)
     data["criticidade"] = _casar_opcao(data.get("criticidade"), CRITICIDADES, CRITICIDADE_PADRAO)
 

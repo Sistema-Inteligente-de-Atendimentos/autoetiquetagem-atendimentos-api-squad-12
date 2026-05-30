@@ -16,6 +16,7 @@ from app.models import (
     ChannelChatProtocol,
     CronEstado,
 )
+from app.routes.categorias import get_categorias_extras
 from app.services.chat_parser import dividir_mensagens
 from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
@@ -83,7 +84,8 @@ def _ler_planilha(url: str) -> pd.DataFrame:
 
 def _processar_linha(db: Session, texto: str, canal: str, cliente, atendente) -> None:
     exemplos = buscar_exemplos_aprovados(db, limite=3, canal=canal)
-    response = classify_text(texto, exemplos=exemplos)
+    categorias_extras = get_categorias_extras(db)
+    response = classify_text(texto, exemplos=exemplos, categorias_extras=categorias_extras)
 
     if "error" in response:
         raise ValueError(response["error"])
