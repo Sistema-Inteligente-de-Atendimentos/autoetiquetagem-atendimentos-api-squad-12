@@ -176,6 +176,19 @@ def list_atendimentos(db: Session = Depends(get_db)):
     resultado = []
     for p in protocolos:
         avaliacao = p.avaliacoes[0] if p.avaliacoes else None
+
+        categoria = None
+        sentimento = None
+        criticidade = None
+        if avaliacao and avaliacao.json_raw:
+            try:
+                dados_ia = json.loads(avaliacao.json_raw)
+                categoria = dados_ia.get("categoria")
+                sentimento = dados_ia.get("sentimento")
+                criticidade = dados_ia.get("criticidade")
+            except Exception:
+                pass
+
         resultado.append(
             {
                 "protocolo_id": p.id,
@@ -187,6 +200,9 @@ def list_atendimentos(db: Session = Depends(get_db)):
                 "fechado_em": p.fechado_em,
                 "nota": avaliacao.nota if avaliacao else None,
                 "comentario": avaliacao.comentario if avaliacao else None,
+                "categoria": categoria,
+                "sentimento": sentimento,
+                "criticidade": criticidade,
                 "aprovado_como_exemplo": bool(avaliacao.aprovado_como_exemplo) if avaliacao else False,
             }
         )
