@@ -326,6 +326,15 @@ def get_atendimento_detalhe(protocolo_id: int, db: Session = Depends(get_db)):
         key=lambda m: m.id,
     )
 
+    avaliacao = protocolo.avaliacoes[0] if protocolo.avaliacoes else None
+
+    classificacao = None
+    if avaliacao and avaliacao.json_raw:
+        try:
+            classificacao = json.loads(avaliacao.json_raw)
+        except Exception:
+            classificacao = None
+
     return ProtocoloDetalheOut(
         id=protocolo.id,
         numero=protocolo.numero,
@@ -333,9 +342,6 @@ def get_atendimento_detalhe(protocolo_id: int, db: Session = Depends(get_db)):
         fechado_em=protocolo.fechado_em,
         chat=ChatOut.model_validate(protocolo.chat),
         mensagens=[MensagemOut.model_validate(m) for m in mensagens_ordenadas],
-        avaliacao=(
-            AvaliacaoOut.model_validate(protocolo.avaliacoes[0])
-            if protocolo.avaliacoes
-            else None
-        ),
+        avaliacao=AvaliacaoOut.model_validate(avaliacao) if avaliacao else None,
+        classificacao=classificacao,
     )

@@ -43,6 +43,7 @@ class ProtocoloDetalheOut(_ORMModel):
     chat: ChatOut
     mensagens: List[MensagemOut] = []
     avaliacao: Optional[AvaliacaoOut] = None
+    classificacao: Optional[dict] = None
 
 
 class ClassifyResponse(BaseModel):
