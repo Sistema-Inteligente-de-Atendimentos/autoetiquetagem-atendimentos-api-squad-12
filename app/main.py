@@ -17,6 +17,7 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.batch import router as batch_router
 from app.routes.cron import router as cron_router
 from app.routes.categorias import router as categorias_router
+from app.routes.auth import router as auth_router
 
 
 app = FastAPI(title="Auto-Etiquetagem de Atendimentos - Squad 12")
@@ -58,6 +59,9 @@ def _aplicar_migrations_simples() -> None:
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "ObservacaoAprovacao" TEXT',
         'CREATE INDEX IF NOT EXISTS ix_avaliacoes_aprovado_como_exemplo ON avaliacoes ("AprovadoComoExemplo")',
         'ALTER TABLE avaliacoes ALTER COLUMN "Nota" TYPE DOUBLE PRECISION USING "Nota"::double precision',
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AnalisadoPor" VARCHAR(150) DEFAULT \'IA\'',
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "JsonRawIa" TEXT',
+        'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "CorrigidoEm" TIMESTAMP WITH TIME ZONE',
     ]
     with engine.begin() as conn:
         for stmt in statements:
@@ -87,3 +91,4 @@ app.include_router(dashboard_router)
 app.include_router(batch_router)
 app.include_router(cron_router)
 app.include_router(categorias_router)
+app.include_router(auth_router)
