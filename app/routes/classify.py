@@ -16,15 +16,19 @@ from app.models import (
     ChannelChat,
     ChannelChatMessage,
     ChannelChatProtocol,
+    Usuario,
 )
+from app.routes.auth import get_current_user
 from app.schemas import (
     AprovarExemploRequest,
     AvaliacaoOut,
     ChatOut,
     ClassifyResponse,
+    CorrecaoClassificacaoRequest,
     MensagemOut,
     ProtocoloDetalheOut,
 )
+from app.core.taxonomy import calcular_score_final
 from app.routes.categorias import get_categorias_extras
 from app.services.chat_parser import dividir_mensagens
 from app.services.llm_service import buscar_exemplos_aprovados, classify_text
@@ -129,6 +133,7 @@ def classify(req: ClassifyRequest, db: Session = Depends(get_db)):
             nota=nota,
             comentario=comentario,
             json_raw=json.dumps(data, ensure_ascii=False),
+            analisado_por="IA",
         )
         db.add(nova_avaliacao)
         db.flush()
@@ -204,6 +209,8 @@ def list_atendimentos(db: Session = Depends(get_db)):
                 "sentimento": sentimento,
                 "criticidade": criticidade,
                 "aprovado_como_exemplo": bool(avaliacao.aprovado_como_exemplo) if avaliacao else False,
+                "analisado_por": (avaliacao.analisado_por or "IA") if avaliacao else None,
+                "avaliado_em": avaliacao.avaliado_em if avaliacao else None,
             }
         )
     return resultado
@@ -260,6 +267,7 @@ def aprovar_como_exemplo(
     protocolo_id: int,
     req: AprovarExemploRequest,
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
 ):
     avaliacao = (
         db.query(Avaliacao)
@@ -270,7 +278,7 @@ def aprovar_como_exemplo(
         raise HTTPException(status_code=404, detail="Avaliação não encontrada para este protocolo")
 
     avaliacao.aprovado_como_exemplo = True
-    avaliacao.aprovado_por = req.revisor.strip() or "Anônimo"
+    avaliacao.aprovado_por = usuario.nome
     avaliacao.aprovado_em = datetime.now(timezone.utc)
     avaliacao.observacao_aprovacao = (req.observacao or "").strip() or None
 
@@ -286,7 +294,11 @@ def aprovar_como_exemplo(
 
 
 @router.post("/atendimentos/{protocolo_id}/remover-exemplo")
-def remover_exemplo(protocolo_id: int, db: Session = Depends(get_db)):
+def remover_exemplo(
+    protocolo_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
     avaliacao = (
         db.query(Avaliacao)
         .filter(Avaliacao.protocolo_id == protocolo_id)
@@ -303,6 +315,71 @@ def remover_exemplo(protocolo_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "removido", "avaliacao_id": avaliacao.id}
+
+
+@router.put("/atendimentos/{protocolo_id}/classificacao")
+def corrigir_classificacao(
+    protocolo_id: int,
+    req: CorrecaoClassificacaoRequest,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    avaliacao = (
+        db.query(Avaliacao)
+        .filter(Avaliacao.protocolo_id == protocolo_id)
+        .first()
+    )
+    if not avaliacao:
+        raise HTTPException(status_code=404, detail="Avaliação não encontrada para este protocolo")
+
+    try:
+        atual = json.loads(avaliacao.json_raw) if avaliacao.json_raw else {}
+    except Exception:
+        atual = {}
+
+    # Preserva o original da IA na primeira correção
+    if not avaliacao.json_raw_ia:
+        avaliacao.json_raw_ia = avaliacao.json_raw
+
+    novo = dict(atual)
+    if req.categoria is not None:
+        novo["categoria"] = req.categoria
+    if req.intencao is not None:
+        novo["intencao"] = req.intencao
+    if req.sentimento is not None:
+        novo["sentimento"] = req.sentimento
+    if req.criticidade is not None:
+        novo["criticidade"] = req.criticidade
+    if req.resumo is not None:
+        novo["resumo"] = req.resumo
+
+    if req.qualidade is not None:
+        qual = dict(novo.get("qualidade") or {})
+        for campo in ("empatia", "clareza", "objetividade", "resolutividade"):
+            valor = getattr(req.qualidade, campo)
+            if valor is not None:
+                qual[campo] = valor
+        qual["score_final"] = calcular_score_final(qual)
+        novo["qualidade"] = qual
+        avaliacao.nota = _to_float(qual["score_final"])
+
+    if req.resumo is not None:
+        avaliacao.comentario = _to_text(req.resumo)
+
+    avaliacao.json_raw = json.dumps(novo, ensure_ascii=False)
+    avaliacao.analisado_por = usuario.nome
+    avaliacao.corrigido_em = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(avaliacao)
+
+    return {
+        "status": "corrigido",
+        "avaliacao_id": avaliacao.id,
+        "analisado_por": avaliacao.analisado_por,
+        "corrigido_em": avaliacao.corrigido_em,
+        "classificacao": novo,
+    }
 
 
 @router.get("/atendimentos/{protocolo_id}", response_model=ProtocoloDetalheOut)

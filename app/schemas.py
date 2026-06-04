@@ -24,6 +24,8 @@ class AvaliacaoOut(_ORMModel):
     aprovado_por: Optional[str] = None
     aprovado_em: Optional[datetime] = None
     observacao_aprovacao: Optional[str] = None
+    analisado_por: Optional[str] = None
+    corrigido_em: Optional[datetime] = None
 
 
 class ChatOut(_ORMModel):
@@ -76,5 +78,21 @@ class DashboardStats(BaseModel):
 
 
 class AprovarExemploRequest(BaseModel):
-    revisor: str
+    revisor: Optional[str] = None
     observacao: Optional[str] = None
+
+
+class QualidadeIn(BaseModel):
+    empatia: Optional[float] = None
+    clareza: Optional[float] = None
+    objetividade: Optional[float] = None
+    resolutividade: Optional[float] = None
+
+
+class CorrecaoClassificacaoRequest(BaseModel):
+    categoria: Optional[str] = None
+    intencao: Optional[str] = None
+    sentimento: Optional[str] = None
+    criticidade: Optional[str] = None
+    resumo: Optional[str] = None
+    qualidade: Optional[QualidadeIn] = None

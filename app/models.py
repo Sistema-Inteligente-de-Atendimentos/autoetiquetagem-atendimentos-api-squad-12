@@ -98,12 +98,26 @@ class Avaliacao(Base):
     avaliado_em = Column("AvaliadoEm", DateTime(timezone=True), server_default=func.now())
 
     json_raw = Column("JsonRaw", Text, nullable=True)
+    json_raw_ia = Column("JsonRawIa", Text, nullable=True)
     aprovado_como_exemplo = Column("AprovadoComoExemplo", Boolean, default=False, nullable=False, index=True)
     aprovado_por = Column("AprovadoPor", String(150), nullable=True)
     aprovado_em = Column("AprovadoEm", DateTime(timezone=True), nullable=True)
     observacao_aprovacao = Column("ObservacaoAprovacao", Text, nullable=True)
 
+    analisado_por = Column("AnalisadoPor", String(150), nullable=True, default="IA")
+    corrigido_em = Column("CorrigidoEm", DateTime(timezone=True), nullable=True)
+
     protocolo = relationship("ChannelChatProtocol", back_populates="avaliacoes")
+
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nome = Column("Nome", String(150), nullable=False)
+    email = Column("Email", String(200), nullable=False, unique=True, index=True)
+    senha_hash = Column("SenhaHash", String(255), nullable=False)
+    criado_em = Column("CriadoEm", DateTime(timezone=True), server_default=func.now())
 
 
 class CronEstado(Base):
