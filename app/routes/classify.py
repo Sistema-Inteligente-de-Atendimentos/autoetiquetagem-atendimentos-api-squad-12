@@ -358,7 +358,7 @@ def corrigir_classificacao(
         for campo in ("empatia", "clareza", "objetividade", "resolutividade"):
             valor = getattr(req.qualidade, campo)
             if valor is not None:
-                qual[campo] = valor
+                qual[campo] = max(0, min(10, _to_float(valor)))
         qual["score_final"] = calcular_score_final(qual)
         novo["qualidade"] = qual
         avaliacao.nota = _to_float(qual["score_final"])
