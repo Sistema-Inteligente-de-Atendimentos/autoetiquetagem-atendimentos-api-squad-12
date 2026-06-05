@@ -16,6 +16,10 @@ API backend desenvolvida com FastAPI para processamento e classificação autom�
 - Gerenciar múltiplas planilhas de origem via interface
 - Aprender continuamente com exemplos aprovados por humanos (feedback loop)
 - Gerenciar categorias customizadas via interface
+- Autenticação de usuários (login) com assinatura de autoria nas análises
+- Correção humana da classificação da IA (auditoria), preservando o original da IA
+- Medir a acurácia da IA com base na revisão humana
+- Filtrar dashboard e lista por período
 - Servir dados estruturados para dashboards analíticos
 - Exportar os atendimentos em CSV
 
@@ -28,6 +32,7 @@ API backend desenvolvida com FastAPI para processamento e classificação autom�
 - **Groq API (Llama 3.1 8B)** — classificação via LLM
 - **Pandas** — leitura de CSV/Excel e planilhas
 - **Pydantic** — validação e serialização
+- **Autenticação** — hash de senha (PBKDF2) e token assinado (HMAC), via biblioteca padrão do Python
 
 ---
 
@@ -42,14 +47,16 @@ app/
 ├── core/
 │   └── taxonomy.py          # Taxonomia fechada, categorias fixas e cálculo do score ponderado
 ├── routes/
-│   ├── classify.py          # Classificação individual, listagem, detalhe, export, aprovação
+│   ├── classify.py          # Classificação, listagem, detalhe, export, aprovação e correção
 │   ├── batch.py             # Processamento em lote (upload CSV/Excel)
-│   ├── dashboard.py         # Métricas agregadas
+│   ├── dashboard.py         # Métricas agregadas e acurácia (com filtro de período)
 │   ├── cron.py              # Análise automática a partir do Google Sheets
-│   └── categorias.py        # Gerenciamento de categorias customizadas e planilhas
+│   ├── categorias.py        # Gerenciamento de categorias customizadas e planilhas
+│   └── auth.py              # Registro, login e dependência de usuário autenticado
 └── services/
     ├── llm_service.py       # Integração com a LLM e feedback loop (few-shot dinâmico)
-    └── chat_parser.py       # Divide o texto do chat em mensagens por remetente
+    ├── chat_parser.py       # Divide o texto do chat em mensagens por remetente
+    └── auth_service.py      # Hash de senha e geração/validação de token
 ```
 
 ---
@@ -60,16 +67,31 @@ app/
 channel_chats
  └── channel_chat_protocols (protocolo, número via UUID)
       ├── channel_chat_messages (mensagens, uma por turno)
-      └── avaliacoes (classificação da IA + validação humana)
+      └── avaliacoes (classificação da IA + validação/correção humana)
 
+usuarios          (contas de acesso ao sistema)
 cron_estado       (contador de linhas processadas por planilha)
 cron_config       (planilhas Google Sheets cadastradas)
 categorias_custom (categorias adicionais além das 9 fixas)
 ```
 
+Campos relevantes em `avaliacoes`:
+- `json_raw` — classificação atual (corrigida, se houver correção)
+- `json_raw_ia` — snapshot da classificação original da IA (preenchido na 1ª correção)
+- `analisado_por` — "IA" por padrão; nome do usuário quando corrigida
+- `corrigido_em` — data da correção humana
+- `aprovado_como_exemplo`, `aprovado_por`, `aprovado_em` — validação humana (feedback loop)
+
 ---
 
 ## Endpoints
+
+### Autenticação
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| POST | `/auth/register` | Cria conta e retorna token |
+| POST | `/auth/login` | Autentica e retorna token |
+| GET | `/auth/me` | Dados do usuário autenticado |
 
 ### Atendimentos
 | Método | Rota | Descrição |
@@ -79,14 +101,16 @@ categorias_custom (categorias adicionais além das 9 fixas)
 | POST | `/classify/batch` | Processa um lote (upload CSV/Excel, até 50 linhas) |
 | GET | `/atendimentos` | Lista resumida dos atendimentos |
 | GET | `/atendimentos/export` | Exporta todos os atendimentos em CSV |
-| GET | `/atendimentos/{protocolo_id}` | Detalhe completo (chat, mensagens, avaliação) |
-| POST | `/atendimentos/{protocolo_id}/aprovar-exemplo` | Marca avaliação como bom exemplo |
-| POST | `/atendimentos/{protocolo_id}/remover-exemplo` | Remove a aprovação |
+| GET | `/atendimentos/{protocolo_id}` | Detalhe completo (chat, mensagens, avaliação, classificação) |
+| PUT | `/atendimentos/{protocolo_id}/classificacao` | Corrige a classificação da IA (autenticado) |
+| POST | `/atendimentos/{protocolo_id}/aprovar-exemplo` | Marca avaliação como bom exemplo (autenticado) |
+| POST | `/atendimentos/{protocolo_id}/remover-exemplo` | Remove a aprovação (autenticado) |
 
 ### Dashboard
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | `/dashboard/stats` | Métricas agregadas (canais, notas, média, exemplos aprovados) |
+| GET | `/dashboard/stats` | Métricas agregadas (canais, notas, média, exemplos). Aceita `?inicio=&fim=` |
+| GET | `/dashboard/acuracia` | Taxa de acerto da IA com base na revisão humana. Aceita `?inicio=&fim=` |
 
 ### Cron
 | Método | Rota | Descrição |
@@ -102,6 +126,7 @@ categorias_custom (categorias adicionais além das 9 fixas)
 | POST | `/config/planilhas` | Adiciona planilha (valida URL antes de salvar) |
 | PATCH | `/config/planilhas/{id}/ativar` | Ativa uma planilha |
 | PATCH | `/config/planilhas/{id}/desativar` | Desativa sem remover |
+| POST | `/config/planilhas/{id}/reset` | Zera o contador de uma planilha específica |
 | DELETE | `/config/planilhas/{id}` | Remove planilha e seu histórico |
 | GET | `/config/categorias` | Lista categorias fixas e customizadas |
 | POST | `/config/categorias` | Adiciona categoria customizada |
@@ -123,9 +148,21 @@ A IA identifica cliente e atendente a partir do texto via few-shot prompting qua
 
 Atendimentos aprovados como "bom exemplo" são injetados no prompt das próximas classificações, melhorando a consistência sem retreinar o modelo. A busca prioriza exemplos do mesmo canal.
 
+### Autenticação e correção humana (auditoria)
+
+Usuários se autenticam (login) e o sistema registra quem corrige cada classificação. A classificação da IA pode ser corrigida por um revisor (`PUT /atendimentos/{id}/classificacao`): os valores são sobrescritos, o original da IA é preservado em `json_raw_ia`, e a assinatura passa de "IA" para o nome do usuário logado, com data. As ações de aprovação/correção exigem autenticação.
+
+### Acurácia da IA
+
+Mede a taxa de acerto da IA com base na revisão humana (`GET /dashboard/acuracia`). O universo são os atendimentos revisados (aprovados como exemplo ou corrigidos): a IA "acertou" quando o caso foi aprovado sem correção, e "errou" quando precisou ser corrigido. A comparação `json_raw_ia` vs `json_raw` indica em quais campos a IA mais erra.
+
+### Filtro de período
+
+Dashboard e lista de atendimentos podem ser filtrados por período (atalhos: hoje, 7 dias, 30 dias, tudo, ou intervalo personalizado). No backend, `/dashboard/stats` e `/dashboard/acuracia` aceitam `inicio` e `fim`.
+
 ### Análise automática via Google Sheets (cron)
 
-Planilhas são cadastradas via `POST /config/planilhas`. O backend valida se o CSV está acessível antes de salvar. Um cron externo (cron-job.org) dispara `POST /cron/analisar` em um horário fixo. O backend processa todas as planilhas ativas, cada uma com seu próprio contador de linhas. Novas linhas adicionadas à planilha são processadas automaticamente no próximo disparo.
+Planilhas são cadastradas via `POST /config/planilhas`. O backend valida e normaliza a URL (aceita link de edição, compartilhamento ou export). Um cron externo (cron-job.org) dispara `POST /cron/analisar` em um horário fixo. O backend processa todas as planilhas ativas, cada uma com seu próprio contador de linhas, processando apenas as linhas novas a cada disparo.
 
 ---
 
@@ -134,6 +171,9 @@ Planilhas são cadastradas via `POST /config/planilhas`. O backend valida se o C
 ```env
 DATABASE_URL=postgresql://usuario:senha@host:5432/banco
 GROQ_API_KEY=sua_chave_groq
+
+# Autenticação (defina um valor aleatório e secreto em produção)
+AUTH_SECRET=chave_secreta_para_assinar_tokens
 
 # Obrigatório para o cron
 CRON_TOKEN=token_secreto_para_proteger_o_endpoint
@@ -187,6 +227,10 @@ As tabelas são criadas automaticamente no startup (`create_all` + migrations id
 ```
 http://127.0.0.1:8000/docs
 ```
+
+### 7. Primeiro acesso
+
+Crie a primeira conta via `POST /auth/register` (ou pela tela de login do frontend, em "Criar conta"). A partir daí, as ações de correção/aprovação ficam atreladas ao usuário logado.
 
 ---
 
