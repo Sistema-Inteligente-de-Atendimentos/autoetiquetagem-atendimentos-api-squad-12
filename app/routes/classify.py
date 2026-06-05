@@ -254,6 +254,12 @@ def list_divergencias(db: Session = Depends(get_db)):
             fim_v = _txt(final.get(chave))
             campos.append({"campo": rotulo, "ia": ia_v, "corrigido": fim_v, "mudou": ia_v != fim_v})
 
+        def _num(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
         q_ia = ia.get("qualidade") or {}
         q_fim = final.get("qualidade") or {}
         for rotulo, chave in [
@@ -262,9 +268,14 @@ def list_divergencias(db: Session = Depends(get_db)):
             ("Objetividade", "objetividade"),
             ("Resolutividade", "resolutividade"),
         ]:
-            ia_v = _txt(q_ia.get(chave))
-            fim_v = _txt(q_fim.get(chave))
-            campos.append({"campo": rotulo, "ia": ia_v, "corrigido": fim_v, "mudou": ia_v != fim_v})
+            n_ia, n_fim = _num(q_ia.get(chave)), _num(q_fim.get(chave))
+            mudou = n_ia != n_fim
+            campos.append({
+                "campo": rotulo,
+                "ia": "" if n_ia is None else (str(int(n_ia)) if n_ia == int(n_ia) else str(n_ia)),
+                "corrigido": "" if n_fim is None else (str(int(n_fim)) if n_fim == int(n_fim) else str(n_fim)),
+                "mudou": mudou,
+            })
 
         protocolo = av.protocolo
         resultado.append({
