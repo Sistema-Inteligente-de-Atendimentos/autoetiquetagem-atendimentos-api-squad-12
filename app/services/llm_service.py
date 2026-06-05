@@ -107,8 +107,8 @@ def classify_text(text: str, exemplos: Optional[List[Avaliacao]] = None, categor
         - objetividade (0-10)
         - resolutividade (0-10)
         - score_final (0-10)
-    - resumo (máx 3 linhas)
-    - topicos (lista)
+    - resumo: um parágrafo curto em TEXTO CORRIDO (2 a 3 frases) descrevendo o atendimento de forma fluida, como um resumo narrativo. NÃO use lista, tópicos ou bullets — deve ser uma string única.
+    - topicos (lista de palavras-chave/temas do atendimento)
     - cliente_nome: nome do cliente extraído do texto (apenas o primeiro nome ou nome completo), ou null se realmente não houver nenhuma menção.
     - atendente_nome: nome do atendente extraído do texto, ou null se realmente não houver nenhuma menção.
 

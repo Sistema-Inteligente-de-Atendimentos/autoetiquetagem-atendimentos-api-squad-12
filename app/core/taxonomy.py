@@ -97,4 +97,9 @@ def validar_classificacao(data: dict, categorias: Optional[List[str]] = None) ->
     qualidade["score_final"] = calcular_score_final(qualidade)
     data["qualidade"] = qualidade
 
+    # Resumo sempre como texto corrido (caso a IA retorne lista, junta em frase)
+    resumo = data.get("resumo")
+    if isinstance(resumo, list):
+        data["resumo"] = " ".join(str(r).strip() for r in resumo if str(r).strip())
+
     return data

@@ -57,6 +57,17 @@ def test_valores_ausentes_usam_padrao():
     assert r["criticidade"] == "Média"
 
 
+def test_resumo_lista_vira_texto_corrido():
+    r = validar_classificacao({"resumo": ["Cliente pediu troca.", "Atendente resolveu."]})
+    assert r["resumo"] == "Cliente pediu troca. Atendente resolveu."
+    assert isinstance(r["resumo"], str)
+
+
+def test_resumo_string_permanece():
+    r = validar_classificacao({"resumo": "Já é um texto corrido."})
+    assert r["resumo"] == "Já é um texto corrido."
+
+
 def test_score_final_recalculado_na_validacao():
     r = validar_classificacao({
         "qualidade": {"empatia": 6, "clareza": 6, "objetividade": 6, "resolutividade": 6}
