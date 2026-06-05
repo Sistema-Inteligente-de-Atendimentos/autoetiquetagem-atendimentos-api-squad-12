@@ -77,6 +77,14 @@ class DashboardStats(BaseModel):
     total_exemplos_aprovados: int = 0
 
 
+class AcuraciaStats(BaseModel):
+    total_revisados: int
+    acertos: int
+    corrigidos: int
+    acuracia: float
+    erros_por_campo: dict
+
+
 class AprovarExemploRequest(BaseModel):
     revisor: Optional[str] = None
     observacao: Optional[str] = None
