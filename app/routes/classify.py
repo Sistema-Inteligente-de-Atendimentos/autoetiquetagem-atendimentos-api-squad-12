@@ -216,6 +216,81 @@ def list_atendimentos(db: Session = Depends(get_db)):
     return resultado
 
 
+@router.get("/atendimentos/divergencias")
+def list_divergencias(db: Session = Depends(get_db)):
+    """Lista os atendimentos corrigidos por humano, com o diff IA vs correção."""
+    avaliacoes = (
+        db.query(Avaliacao)
+        .options(joinedload(Avaliacao.protocolo).joinedload(ChannelChatProtocol.chat))
+        .filter(Avaliacao.json_raw_ia.isnot(None))
+        .order_by(Avaliacao.corrigido_em.desc())
+        .all()
+    )
+
+    def _txt(v):
+        if v is None:
+            return ""
+        if isinstance(v, list):
+            return " | ".join(str(x) for x in v)
+        return str(v)
+
+    resultado = []
+    for av in avaliacoes:
+        try:
+            ia = json.loads(av.json_raw_ia)
+            final = json.loads(av.json_raw or "{}")
+        except Exception:
+            continue
+
+        campos = []
+        for rotulo, chave in [
+            ("Categoria", "categoria"),
+            ("Intenção", "intencao"),
+            ("Sentimento", "sentimento"),
+            ("Criticidade", "criticidade"),
+            ("Resumo", "resumo"),
+        ]:
+            ia_v = _txt(ia.get(chave))
+            fim_v = _txt(final.get(chave))
+            campos.append({"campo": rotulo, "ia": ia_v, "corrigido": fim_v, "mudou": ia_v != fim_v})
+
+        def _num(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        q_ia = ia.get("qualidade") or {}
+        q_fim = final.get("qualidade") or {}
+        for rotulo, chave in [
+            ("Empatia", "empatia"),
+            ("Clareza", "clareza"),
+            ("Objetividade", "objetividade"),
+            ("Resolutividade", "resolutividade"),
+        ]:
+            n_ia, n_fim = _num(q_ia.get(chave)), _num(q_fim.get(chave))
+            mudou = n_ia != n_fim
+            campos.append({
+                "campo": rotulo,
+                "ia": "" if n_ia is None else (str(int(n_ia)) if n_ia == int(n_ia) else str(n_ia)),
+                "corrigido": "" if n_fim is None else (str(int(n_fim)) if n_fim == int(n_fim) else str(n_fim)),
+                "mudou": mudou,
+            })
+
+        protocolo = av.protocolo
+        resultado.append({
+            "protocolo_id": av.protocolo_id,
+            "numero": protocolo.numero if protocolo else None,
+            "cliente_nome": protocolo.chat.cliente_nome if protocolo and protocolo.chat else None,
+            "analisado_por": av.analisado_por,
+            "corrigido_em": av.corrigido_em,
+            "total_mudancas": sum(1 for c in campos if c["mudou"]),
+            "campos": campos,
+        })
+
+    return resultado
+
+
 @router.get("/atendimentos/export")
 def export_atendimentos(db: Session = Depends(get_db)):
     protocolos = (
