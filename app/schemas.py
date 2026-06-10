@@ -104,3 +104,22 @@ class CorrecaoClassificacaoRequest(BaseModel):
     criticidade: Optional[str] = None
     resumo: Optional[str] = None
     qualidade: Optional[QualidadeIn] = None
+
+
+class GoldenDatasetItemIn(BaseModel):
+    avaliacao_id: int
+    incluido_por: Optional[str] = None
+
+
+class GoldenDatasetRunOut(_ORMModel):
+    id: int
+    executado_em: Optional[datetime] = None
+    total_casos: int
+    acertos_categoria: int
+    acertos_sentimento: int
+    acertos_criticidade: int
+    acuracia_geral: float
+
+
+class GoldenDatasetRunDetalheOut(GoldenDatasetRunOut):
+    detalhes: list = []

@@ -150,3 +150,39 @@ class CategoriaCustom(Base):
     nome = Column("Nome", String(100), nullable=False, unique=True, index=True)
     criada_por = Column("CriadaPor", String(150), nullable=True)
     criado_em = Column("CriadoEm", DateTime(timezone=True), server_default=func.now())
+
+
+class GoldenDatasetItem(Base):
+    __tablename__ = "golden_dataset_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    avaliacao_id = Column(
+        "AvaliacaoId",
+        Integer,
+        ForeignKey("avaliacoes.id"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    texto = Column("Texto", Text, nullable=False)
+    categoria_esperada = Column("CategoriaEsperada", String(100), nullable=True)
+    sentimento_esperado = Column("SentimentoEsperado", String(50), nullable=True)
+    criticidade_esperada = Column("CriticidadeEsperada", String(50), nullable=True)
+    score_esperado = Column("ScoreEsperado", Float, nullable=True)
+    incluido_por = Column("IncluidoPor", String(150), nullable=True)
+    incluido_em = Column("IncluidoEm", DateTime(timezone=True), server_default=func.now())
+
+    avaliacao = relationship("Avaliacao")
+
+
+class GoldenDatasetRun(Base):
+    __tablename__ = "golden_dataset_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    executado_em = Column("ExecutadoEm", DateTime(timezone=True), server_default=func.now())
+    total_casos = Column("TotalCasos", Integer, nullable=False, default=0)
+    acertos_categoria = Column("AcertosCategoria", Integer, nullable=False, default=0)
+    acertos_sentimento = Column("AcertosSentimento", Integer, nullable=False, default=0)
+    acertos_criticidade = Column("AcertosCriticidade", Integer, nullable=False, default=0)
+    acuracia_geral = Column("AcuraciaGeral", Float, nullable=False, default=0.0)
+    detalhes_json = Column("DetalhesJson", Text, nullable=True)
