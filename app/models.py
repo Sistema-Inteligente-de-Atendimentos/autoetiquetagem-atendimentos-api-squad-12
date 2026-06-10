@@ -127,6 +127,8 @@ class CronEstado(Base):
     fonte = Column("Fonte", String(500), nullable=False, unique=True, index=True)
     ultima_linha = Column("UltimaLinha", Integer, nullable=False, default=0)
     total_processados = Column("TotalProcessados", Integer, nullable=False, default=0)
+    total_erros = Column("TotalErros", Integer, nullable=False, default=0)
+    ultimo_erro = Column("UltimoErro", Text, nullable=True)
     atualizado_em = Column("AtualizadoEm", DateTime(timezone=True), nullable=True)
 
 
