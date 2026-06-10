@@ -62,6 +62,8 @@ def _aplicar_migrations_simples() -> None:
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "AnalisadoPor" VARCHAR(150) DEFAULT \'IA\'',
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "JsonRawIa" TEXT',
         'ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS "CorrigidoEm" TIMESTAMP WITH TIME ZONE',
+        'ALTER TABLE cron_estado ADD COLUMN IF NOT EXISTS "TotalErros" INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE cron_estado ADD COLUMN IF NOT EXISTS "UltimoErro" TEXT',
     ]
     with engine.begin() as conn:
         for stmt in statements:

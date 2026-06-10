@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -21,6 +22,8 @@ from app.routes.categorias import get_categorias_extras, normalizar_url_planilha
 from app.services.chat_parser import dividir_mensagens
 from app.services.llm_service import buscar_exemplos_aprovados, classify_text
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cron", tags=["Cron"])
 
@@ -168,8 +171,10 @@ def _processar_url(db: Session, url: str) -> int:
 
     novas = df.iloc[inicio:]
     processados = 0
+    erros = 0
+    ultimo_erro = None
 
-    for _, row in novas.iterrows():
+    for idx, row in novas.iterrows():
         texto = row.get(col_texto)
         if pd.isna(texto) or not str(texto).strip():
             continue
@@ -182,12 +187,21 @@ def _processar_url(db: Session, url: str) -> int:
             _processar_linha(db, texto, canal, cliente, atendente)
             db.commit()
             processados += 1
-        except Exception:
+        except Exception as exc:
             db.rollback()
+            erros += 1
+            ultimo_erro = f"linha {idx}: {exc}"
+            logger.exception("Falha ao processar linha %s da planilha %s", idx, url)
             continue
 
+    # ultima_linha avanca ate o fim mesmo quando ha falhas, para nao reprocessar
+    # (e duplicar) linhas que ja foram commitadas com sucesso. Linhas com erro
+    # ficam registradas em total_erros/ultimo_erro e no log para correcao manual.
     estado.ultima_linha = total_linhas
     estado.total_processados = (estado.total_processados or 0) + processados
+    estado.total_erros = (estado.total_erros or 0) + erros
+    if ultimo_erro:
+        estado.ultimo_erro = ultimo_erro
     estado.atualizado_em = datetime.now(timezone.utc)
     db.commit()
     return processados
@@ -235,6 +249,8 @@ def cron_status(db: Session = Depends(get_db)):
             "fonte": e.fonte,
             "ultima_linha": e.ultima_linha,
             "total_processados": e.total_processados,
+            "total_erros": e.total_erros,
+            "ultimo_erro": e.ultimo_erro,
             "atualizado_em": e.atualizado_em,
         }
         for e in estados
